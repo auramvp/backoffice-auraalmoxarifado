@@ -14,14 +14,14 @@ serve(async (req) => {
 
     if (action === 'fix_duplicates') {
       console.log('Iniciando correção de duplicatas...')
-      
+
       // 1. Remover o "Plano Pro" incorreto (R$ 497)
       const { error: deleteError } = await supabase
         .from('plans')
         .delete()
         .eq('name', 'Plano Pro')
         .eq('value', 497)
-      
+
       if (deleteError) console.error('Erro ao deletar plano incorreto:', deleteError)
       else console.log('Plano Pro (R$ 497) removido com sucesso.')
 
@@ -45,7 +45,7 @@ serve(async (req) => {
       const clientId = Deno.env.get('CAKTO_CLIENT_ID') || '8L9pEZdS4hS9rHOuGFmyPChrSYbOOswJJ0ZQSgeq'
       const clientSecret = Deno.env.get('CAKTO_CLIENT_SECRET') || '0578WYVcpdNGQiHCcjByJeIBdbGk2oJRsaAdCz1tEAfa72WvGhwvKOdfrvgbdbdo7Pe8XYwDWTiFHdUkt68mfcE9F4pSweKWg9JXHmqDVR6zvnoBo8FFc9vxSQQQluRx'
       let accessToken = Deno.env.get('CAKTO_API_TOKEN')
-      
+
       // Se tiver credenciais, tentar obter token novo (OAuth2)
       if (clientId && clientSecret) {
         console.log('Tentando autenticar via OAuth2 na Cakto...')
@@ -74,11 +74,11 @@ serve(async (req) => {
           console.error('Erro na requisição de autenticação:', e)
         }
       }
-      
+
       if (!accessToken) {
-        return new Response(JSON.stringify({ error: 'Credenciais inválidas e CAKTO_API_TOKEN não configurado' }), { 
-          status: 500, 
-          headers: { 'Content-Type': 'application/json' } 
+        return new Response(JSON.stringify({ error: 'Credenciais inválidas e CAKTO_API_TOKEN não configurado' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
         })
       }
 
@@ -86,7 +86,7 @@ serve(async (req) => {
 
       // Limpar planos antigos (fictícios ou desatualizados)
       await supabase.from('plans').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-      
+
       // Buscar TODAS as ofertas (limit=100 para garantir que pegue tudo)
       const response = await fetch('https://api.cakto.com.br/api/offers/?limit=100', {
         method: 'GET',
@@ -99,18 +99,18 @@ serve(async (req) => {
       if (!response.ok) {
         const errorText = await response.text()
         console.error('Erro na API da Cakto:', errorText)
-        return new Response(JSON.stringify({ error: `Erro na API da Cakto: ${response.status}`, details: errorText }), { 
-          status: response.status, 
-          headers: { 'Content-Type': 'application/json' } 
+        return new Response(JSON.stringify({ error: `Erro na API da Cakto: ${response.status}`, details: errorText }), {
+          status: response.status,
+          headers: { 'Content-Type': 'application/json' }
         })
       }
 
       const data = await response.json()
       // Cakto geralmente retorna { data: [...] } ou array direto ou { results: [...] }
       const allOffers = data.data || data.results || (Array.isArray(data) ? data : [])
-      
+
       let syncedCount = 0
-      
+
       // IDs de produtos conhecidos do Aura (Ativo ou Deletado) que contém os planos desejados
       const AURA_PRODUCT_IDS = [
         // 'eb406e9e-dd90-4bb8-8b8a-c381d9c7657e', // Produto "Aura Almoxarifado Inteligente" (Deleted) - REMOVIDO para evitar conflito de preços antigos
@@ -122,51 +122,51 @@ serve(async (req) => {
         const productId = offer.product || offer.product_id
         const price = offer.price || offer.value || 0
         const externalId = offer.id || String(Math.random())
-        
+
         // CORREÇÃO: Pano Pro -> Plano Pro
         if (/pano pro/i.test(name)) {
-           name = 'Plano Pro'
+          name = 'Plano Pro'
         }
 
         // CORREÇÃO: Ignorar Plano Pro duplicado (R$ 497)
         // Se for "Plano Pro" e o preço não for próximo de 297, ignorar
         if (name === 'Plano Pro' && Math.abs(price - 297) > 50) {
-           console.log(`Ignorando duplicata incorreta: ${name} - R$ ${price}`)
-           continue
+          console.log(`Ignorando duplicata incorreta: ${name} - R$ ${price}`)
+          continue
         }
 
         // FILTRAGEM:
         // 1. Pertence a um dos produtos Aura conhecidos?
         // 2. Aceitar TUDO que vier desses produtos.
         const isAuraProduct = AURA_PRODUCT_IDS.includes(productId)
-        
-        if (isAuraProduct) {
-           console.log(`Sincronizando Oferta: ${name} - R$ ${price} [${externalId}]`)
-           
-           // Usamos insert porque limpamos a tabela antes. 
-           // Isso permite nomes duplicados se existirem na Cakto (ex: Plano Starter com preços diferentes)
-           const { error } = await supabase
-             .from('plans')
-             .insert({
-               name: name,
-               value: price,
-               description: offer.description || null,
-               external_id: externalId,
-               status: 'active'
-             })
 
-           if (!error) syncedCount++
-           else console.error(`Erro ao salvar ${name}:`, error)
+        if (isAuraProduct) {
+          console.log(`Sincronizando Oferta: ${name} - R$ ${price} [${externalId}]`)
+
+          // Usamos insert porque limpamos a tabela antes. 
+          // Isso permite nomes duplicados se existirem na Cakto (ex: Plano Starter com preços diferentes)
+          const { error } = await supabase
+            .from('plans')
+            .insert({
+              name: name,
+              value: price,
+              description: offer.description || null,
+              external_id: externalId,
+              status: 'active'
+            })
+
+          if (!error) syncedCount++
+          else console.error(`Erro ao salvar ${name}:`, error)
         }
       }
 
-      return new Response(JSON.stringify({ 
-        message: 'Sincronização concluída', 
+      return new Response(JSON.stringify({
+        message: 'Sincronização concluída',
         synced: syncedCount,
         total_found: allOffers.length
-      }), { 
-        status: 200, 
-        headers: { 'Content-Type': 'application/json' } 
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
       })
     }
 
@@ -185,7 +185,7 @@ serve(async (req) => {
 
     if (!email) {
       console.warn('Email não encontrado no payload')
-      return new Response(JSON.stringify({ error: 'Email not found in payload' }), { 
+      return new Response(JSON.stringify({ error: 'Email not found in payload' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       })
@@ -212,14 +212,14 @@ serve(async (req) => {
       // Usuário não encontrado no sistema ou sem empresa vinculada
       // Tentar usar o documento do payload como fallback se disponível
       console.warn(`Usuário com email ${email} não encontrado ou sem empresa vinculada.`)
-      
+
       const doc = customer.document_number || customer.cpf_cnpj || customer.cnpj || payload.doc_number
       if (doc) {
         targetCnpj = doc
         console.log(`Usando documento do payload como CNPJ/CPF: ${targetCnpj}`)
       } else {
-        return new Response(JSON.stringify({ error: 'User not found and no document provided in payload' }), { 
-          status: 404, 
+        return new Response(JSON.stringify({ error: 'User not found and no document provided in payload' }), {
+          status: 404,
           headers: { 'Content-Type': 'application/json' }
         })
       }
@@ -238,23 +238,23 @@ serve(async (req) => {
       // Tentar obter valor do plano (pode vir em payload.value ou payload.plan.price ou payload.plan.amount)
       // Ajuste conforme o payload real da Cakto
       const planValue = payload.plan.price || payload.plan.amount || payload.value || 0
-      
+
       if (planName) {
-         console.log(`Sincronizando plano: ${planName} - R$ ${planValue}`)
-         const { error: planError } = await supabase
-           .from('plans')
-           .upsert({
-             name: planName,
-             value: planValue,
-             status: 'active',
-             external_id: payload.plan.id || null
-             // description pode ser atualizado se vier no payload
-           }, { onConflict: 'name' }) // Assumindo que o nome é único ou usando external_id se preferir
-         
-         if (planError) {
-            console.error('Erro ao sincronizar plano:', planError)
-            // Não vamos parar o processo se falhar o plano, mas logamos
-         }
+        console.log(`Sincronizando plano: ${planName} - R$ ${planValue}`)
+        const { error: planError } = await supabase
+          .from('plans')
+          .upsert({
+            name: planName,
+            value: planValue,
+            status: 'active',
+            external_id: payload.plan.id || null
+            // description pode ser atualizado se vier no payload
+          }, { onConflict: 'name' }) // Assumindo que o nome é único ou usando external_id se preferir
+
+        if (planError) {
+          console.error('Erro ao sincronizar plano:', planError)
+          // Não vamos parar o processo se falhar o plano, mas logamos
+        }
       }
     }
     // --------------------------------------
@@ -299,12 +299,23 @@ serve(async (req) => {
     // 7. (Opcional) Atualizar status da empresa na tabela 'companies' se necessário
     // Isso garante que a flag de status na tabela de empresas também reflita a assinatura
     if (targetCnpj) {
-       const companyStatus = (newStatus === 'active' || newStatus === 'trial') ? 'active' : 'suspended';
-       await supabase.from('companies').update({ status: companyStatus }).eq('cnpj', targetCnpj);
+      // Buscar plano da empresa para verificar se é Parceiro (Bypass)
+      const { data: companyData } = await supabase
+        .from('companies')
+        .select('plan')
+        .eq('cnpj', targetCnpj)
+        .maybeSingle();
+
+      if (companyData?.plan === 'Partners') {
+        console.log(`Empresa parceira detectada (${targetCnpj}). Bypass no status de assinatura.`);
+      } else {
+        const companyStatus = (newStatus === 'active' || newStatus === 'trial') ? 'active' : 'suspended';
+        await supabase.from('companies').update({ status: companyStatus }).eq('cnpj', targetCnpj);
+      }
     }
 
-    return new Response(JSON.stringify({ 
-      message: 'Webhook processado com sucesso', 
+    return new Response(JSON.stringify({
+      message: 'Webhook processado com sucesso',
       linked_company: targetCompanyName,
       status_applied: newStatus
     }), {

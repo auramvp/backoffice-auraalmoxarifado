@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   Users2, Plus, Search, Shield, ShieldCheck, Trash2, RefreshCcw, X,
   CheckCircle2, Lock, UserPlus, LayoutDashboard, Users, Building2,
-  DollarSign, Zap, Scale, ChevronDown, Mail
+  DollarSign, Zap, Scale, ChevronDown, Mail, Megaphone
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { TeamMember, View } from '../types';
@@ -14,11 +14,10 @@ export const TeamView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [currentUserProfile, setCurrentUserProfile] = useState<{ name: string, role: string } | null>(null);
-  
+
   const [newMember, setNewMember] = useState({
     name: '',
     email: '',
-    accessCode: '',
     role: 'Master',
     permissions: [] as string[]
   });
@@ -35,7 +34,7 @@ export const TeamView: React.FC = () => {
         // Prioridade 1: Buscar do perfil público (tabela profiles)
         let name = null;
         let role = null;
-        
+
         const { data: profile } = await supabase
           .from('profiles')
           .select('name, role')
@@ -43,19 +42,19 @@ export const TeamView: React.FC = () => {
           .single();
 
         if (profile) {
-            name = profile.name;
-            role = profile.role;
+          name = profile.name;
+          role = profile.role;
         }
 
         // Prioridade 2: Metadados do Auth
         if (!name) {
-             name = user.user_metadata?.name;
-             role = user.user_metadata?.role;
+          name = user.user_metadata?.name;
+          role = user.user_metadata?.role;
         }
-        
-        setCurrentUserProfile({ 
-            name: name || 'Usuário Backoffice', 
-            role: role || 'ADMIN'
+
+        setCurrentUserProfile({
+          name: name || 'Usuário Backoffice',
+          role: role || 'ADMIN'
         });
       }
     } catch (error) {
@@ -71,7 +70,7 @@ export const TeamView: React.FC = () => {
       .select('*')
       .in('role', ['ADMIN', 'ALMOXARIFE'])
       .order('name');
-      
+
     if (!error && data) {
       // Filtra localmente para garantir que apenas quem tem acesso real apareça
       // ADMIN: Sempre tem acesso
@@ -84,41 +83,25 @@ export const TeamView: React.FC = () => {
         }
         return false;
       });
-      
+
       setTeam(activeBackofficeUsers as any);
     }
     setLoading(false);
   };
 
   const handleAddMember = async () => {
-    // Generate a 6-digit PIN if not provided
-    const pin = newMember.accessCode || Math.floor(100000 + Math.random() * 900000).toString();
-    
     if (!newMember.name || !newMember.email) return;
 
     // Se for Master, permissões totais
-    const permissionsToSave = newMember.role === 'Master' 
-      ? { all: true } 
+    const permissionsToSave = newMember.role === 'Master'
+      ? { all: true }
       : newMember.permissions.reduce((acc, curr) => ({ ...acc, [curr]: true }), {});
-    
-    // Primeiro cria usuário no Auth (necessário ser via backend ou função edge idealmente, mas aqui simulamos cadastro)
-    // Nota: Criar usuário diretamente no Auth via cliente só funciona se 'Enable Email Signup' estiver on e não precisar de confirmação,
-    // ou se usarmos uma Edge Function administrativa. 
-    // Como fallback, vamos apenas inserir no profiles para visualização se o Auth falhar ou assumir que o usuário já existe.
-    
-    // Tenta criar usuário Auth para login real
-    // Nota: Isso pode alterar a sessão atual se 'Auto Confirm' estiver ativado
-    
-    // Tratamento para PINs curtos (Supabase exige min 6 chars)
-    // Se o PIN for numérico e menor que 6 dígitos, fazemos padding com zeros à esquerda
-    // Ex: 782 -> 000782
-    const isShortPin = pin.length < 6 && /^\d+$/.test(pin);
-    const authPassword = isShortPin ? pin.padStart(6, '0') : pin;
 
-    const { error: authError } = await supabase.auth.signUp({
+    // Envia magic link para o email do novo membro
+    const { error: authError } = await supabase.auth.signInWithOtp({
       email: newMember.email,
-      password: authPassword,
       options: {
+        emailRedirectTo: 'https://admin.auraalmoxarifado.com.br',
         data: {
           name: newMember.name,
           role: newMember.role === 'Master' ? 'ADMIN' : 'ALMOXARIFE',
@@ -130,7 +113,7 @@ export const TeamView: React.FC = () => {
       console.warn("Aviso Auth:", authError.message);
       // Não interrompemos pois pode ser apenas que o usuário já exista
     }
-    
+
     // Tenta verificar se o usuário já existe
     const { data: existingUser } = await supabase
       .from('profiles')
@@ -147,29 +130,27 @@ export const TeamView: React.FC = () => {
         .update({
           name: newMember.name,
           role: newMember.role === 'Master' ? 'ADMIN' : 'ALMOXARIFE',
-          permissions: permissionsToSave,
-          access_code: pin
+          permissions: permissionsToSave
         })
         .eq('id', existingUser.id)
         .select();
-      
+
       data = result.data;
       error = result.error;
-      
+
       // Se atualizou com sucesso, removemos da lista antiga (para readicionar atualizado)
       if (!error && data) {
-         setTeam(prev => prev.filter(p => p.email !== newMember.email));
+        setTeam(prev => prev.filter(p => p.email !== newMember.email));
       }
     } else {
       // Insere novo usuário
       const result = await supabase.from('profiles').insert([{
         name: newMember.name,
         email: newMember.email,
-        access_code: pin, 
         role: newMember.role === 'Master' ? 'ADMIN' : 'ALMOXARIFE',
         permissions: permissionsToSave,
       }]).select();
-      
+
       data = result.data;
       error = result.error;
     }
@@ -190,8 +171,8 @@ export const TeamView: React.FC = () => {
             }
 
             if (!currentName) {
-               currentName = user.user_metadata?.name;
-               currentRole = user.user_metadata?.role;
+              currentName = user.user_metadata?.name;
+              currentRole = user.user_metadata?.role;
             }
           }
         } catch (e) {
@@ -213,10 +194,12 @@ export const TeamView: React.FC = () => {
       setNewMember({
         name: '',
         email: '',
-        accessCode: '',
         role: 'Master',
         permissions: []
       });
+
+      // Avisa que link mágico foi enviado
+      alert(`Link de acesso enviado para ${newMember.email}!`);
     } else {
       // Se falhar por constraint de role, tentar ajustar
       alert("Erro ao salvar membro: " + error?.message);
@@ -226,8 +209,8 @@ export const TeamView: React.FC = () => {
   const togglePermission = (perm: string) => {
     setNewMember(prev => ({
       ...prev,
-      permissions: prev.permissions.includes(perm) 
-        ? prev.permissions.filter(p => p !== perm) 
+      permissions: prev.permissions.includes(perm)
+        ? prev.permissions.filter(p => p !== perm)
         : [...prev.permissions, perm]
     }));
   };
@@ -243,6 +226,7 @@ export const TeamView: React.FC = () => {
     { id: View.FINANCE, label: 'Financeiro', icon: DollarSign },
     { id: View.SUBSCRIPTIONS, label: 'Assinaturas', icon: Zap },
     { id: View.TAX_RECOVERY, label: 'Recup. Tributária', icon: Scale },
+    { id: View.MARKETING, label: 'Marketing', icon: Megaphone },
   ];
 
   return (
@@ -270,7 +254,7 @@ export const TeamView: React.FC = () => {
               <thead>
                 <tr className="bg-slate-50 dark:bg-[#0F172A] border-b border-slate-200 dark:border-white/5">
                   <th className="px-6 py-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">Membro</th>
-                  <th className="px-6 py-3 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">PIN Acesso</th>
+                  <th className="px-6 py-3 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Email</th>
                   <th className="px-6 py-3 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Nível</th>
                   <th className="px-6 py-3 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Status</th>
                   <th className="px-6 py-3"></th>
@@ -284,27 +268,27 @@ export const TeamView: React.FC = () => {
                         <div className="w-8 h-8 bg-blue-600/10 rounded-lg flex items-center justify-center text-blue-500 border border-blue-500/10 uppercase font-black text-xs">{member.name.charAt(0)}</div>
                         <div>
                           <p className="font-bold text-slate-900 dark:text-white text-sm leading-tight group-hover:text-blue-500 transition-colors">{member.name}</p>
-                          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">ID: {member.id.substring(0,8).toUpperCase()}</p>
+                          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">ID: {member.id.substring(0, 8).toUpperCase()}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-3 text-center">
                       <div className="inline-flex items-center space-x-2 bg-slate-100 dark:bg-white/5 px-3 py-1 rounded-lg border border-slate-200 dark:border-white/5">
-                         <Lock size={12} className="text-slate-500" />
-                         <span className="font-bold text-blue-500 font-mono tracking-widest text-xs">{member.access_code}</span>
+                        <Mail size={12} className="text-slate-500" />
+                        <span className="font-medium text-slate-600 dark:text-slate-400 text-xs truncate max-w-[150px]">{member.email}</span>
                       </div>
                     </td>
                     <td className="px-6 py-3 text-center">
-                       <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest bg-slate-100 dark:bg-white/5 px-2 py-1 rounded border border-slate-200 dark:border-white/5">{member.role}</span>
+                      <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest bg-slate-100 dark:bg-white/5 px-2 py-1 rounded border border-slate-200 dark:border-white/5">{member.role}</span>
                     </td>
                     <td className="px-6 py-3 text-center">
-                       <div className="flex items-center justify-center space-x-2 text-emerald-500">
-                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          <span className="text-[9px] font-black uppercase tracking-[0.2em]">Sincronizado</span>
-                       </div>
+                      <div className="flex items-center justify-center space-x-2 text-emerald-500">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[9px] font-black uppercase tracking-[0.2em]">Sincronizado</span>
+                      </div>
                     </td>
                     <td className="px-6 py-3 text-right">
-                       <button className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+                      <button className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
                     </td>
                   </tr>
                 ))}
@@ -313,7 +297,7 @@ export const TeamView: React.FC = () => {
           </div>
         )}
       </div>
-      
+
       {/* Modal Novo Acesso */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
@@ -334,10 +318,10 @@ export const TeamView: React.FC = () => {
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Nome Completo</label>
                   <div className="relative">
                     <Users2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={newMember.name}
-                      onChange={(e) => setNewMember({...newMember, name: e.target.value})}
+                      onChange={(e) => setNewMember({ ...newMember, name: e.target.value })}
                       className="w-full bg-black/20 border border-white/10 rounded-lg py-2 pl-10 pr-3 text-sm text-white placeholder-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all outline-none font-medium"
                       placeholder="Ex: João Silva"
                     />
@@ -348,10 +332,10 @@ export const TeamView: React.FC = () => {
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">E-mail Corporativo</label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                    <input 
-                      type="email" 
+                    <input
+                      type="email"
                       value={newMember.email}
-                      onChange={(e) => setNewMember({...newMember, email: e.target.value})}
+                      onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
                       className="w-full bg-black/20 border border-white/10 rounded-lg py-2 pl-10 pr-3 text-sm text-white placeholder-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all outline-none font-medium"
                       placeholder="Ex: joao@aura.com"
                     />
@@ -364,12 +348,11 @@ export const TeamView: React.FC = () => {
                     {['Master', 'Time'].map((role) => (
                       <button
                         key={role}
-                        onClick={() => setNewMember({...newMember, role})}
-                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all border ${
-                          newMember.role === role 
-                            ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/50' 
-                            : 'bg-black/20 border-white/5 text-slate-500 hover:border-white/10'
-                        }`}
+                        onClick={() => setNewMember({ ...newMember, role })}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all border ${newMember.role === role
+                          ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/50'
+                          : 'bg-black/20 border-white/5 text-slate-500 hover:border-white/10'
+                          }`}
                       >
                         {role}
                       </button>
@@ -385,17 +368,15 @@ export const TeamView: React.FC = () => {
                         <button
                           key={option.id}
                           onClick={() => togglePermission(option.id)}
-                          className={`flex items-center space-x-2 p-2 rounded-lg text-xs border transition-all ${
-                            newMember.permissions.includes(option.id)
-                              ? 'bg-blue-600/10 border-blue-500/50 text-blue-400'
-                              : 'bg-black/20 border-white/5 text-slate-500 hover:border-white/10'
-                          }`}
+                          className={`flex items-center space-x-2 p-2 rounded-lg text-xs border transition-all ${newMember.permissions.includes(option.id)
+                            ? 'bg-blue-600/10 border-blue-500/50 text-blue-400'
+                            : 'bg-black/20 border-white/5 text-slate-500 hover:border-white/10'
+                            }`}
                         >
-                          <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                            newMember.permissions.includes(option.id)
-                              ? 'bg-blue-500 border-blue-500'
-                              : 'border-slate-600'
-                          }`}>
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center ${newMember.permissions.includes(option.id)
+                            ? 'bg-blue-500 border-blue-500'
+                            : 'border-slate-600'
+                            }`}>
                             {newMember.permissions.includes(option.id) && <CheckCircle2 size={10} className="text-white" />}
                           </div>
                           <span className="font-medium truncate">{option.label}</span>
@@ -405,30 +386,16 @@ export const TeamView: React.FC = () => {
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">PIN de Acesso (Opcional)</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                    <input 
-                      type="text" 
-                      value={newMember.accessCode}
-                      onChange={(e) => setNewMember({...newMember, accessCode: e.target.value})}
-                      className="w-full bg-black/20 border border-white/10 rounded-lg py-2 pl-10 pr-3 text-sm text-white placeholder-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all outline-none font-medium"
-                      placeholder="Gerado automaticamente se vazio"
-                      maxLength={6}
-                    />
-                  </div>
-                </div>
               </div>
 
               <div className="mt-6 pt-4 border-t border-white/5 flex justify-end space-x-2">
-                <button 
+                <button
                   onClick={() => setShowAddModal(false)}
                   className="px-4 py-2 rounded-lg text-[10px] font-black text-slate-400 hover:text-white uppercase tracking-widest transition-colors"
                 >
                   Cancelar
                 </button>
-                <button 
+                <button
                   onClick={handleAddMember}
                   className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-900/20 flex items-center space-x-2 transition-all hover:scale-105 active:scale-95"
                 >

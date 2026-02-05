@@ -10,17 +10,20 @@ import { SubscriptionsView } from './components/SubscriptionsView';
 import { TeamView } from './components/TeamView';
 import { LogsView } from './components/LogsView';
 import { SupportView } from './components/SupportView';
+import { PlansView } from './components/PlansView';
+import { PartnersView } from './components/PartnersView';
+import { MarketingView } from './components/MarketingView';
 import { Login } from './components/Login';
 import { View } from './types';
 import { supabase } from './lib/supabase';
-import { Ban, Lock, PhoneCall, LogOut, ShieldAlert, Loader2, RefreshCcw } from 'lucide-react';
+import { Ban, Lock, PhoneCall, LogOut, ShieldAlert, Loader2, RefreshCcw, CreditCard } from 'lucide-react';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
-  
+
   // Estados de segurança
   const [isSuspended, setIsSuspended] = useState(false);
   const [checkingAccess, setCheckingAccess] = useState(true);
@@ -58,7 +61,7 @@ const App: React.FC = () => {
   }, [theme]);
 
   // Logo URLs
-  const logoUrl = theme === 'dark' 
+  const logoUrl = theme === 'dark'
     ? 'https://zdgapmcalocdvdgvbwsj.supabase.co/storage/v1/object/public/AuraLogo/branco.png'
     : 'https://zdgapmcalocdvdgvbwsj.supabase.co/storage/v1/object/public/AuraLogo/preto.png';
 
@@ -69,17 +72,21 @@ const App: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from('companies')
-        .select('name, status')
+        .select('name, status, plan')
         .eq('id', TARGET_COMPANY_ID)
         .maybeSingle();
 
       if (!error && data) {
         // Assume 'Ativo' se o status for null ou vazio
         const currentStatus = data.status || 'Ativo';
-        const suspended = currentStatus === 'Suspenso';
-        
+        const isPartner = data.plan === 'Partners';
+
+        // Se for parceiro, IGNORA suspensão (Bypass Cakto)
+        // Caso contrário, suspende se o status for 'Suspenso'
+        const suspended = isPartner ? false : currentStatus === 'Suspenso';
+
         if (suspended !== isSuspended) {
-          console.log(`Segurança Aura: Status alterado para ${currentStatus}`);
+          console.log(`Segurança Aura: Status alterado para ${currentStatus} (Partner: ${isPartner})`);
           setIsSuspended(suspended);
         }
         setCurrentCompanyName(data.name);
@@ -91,7 +98,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!session) return;
-    
+
     if (!TARGET_COMPANY_ID) {
       setCheckingAccess(false);
       return;
@@ -150,7 +157,7 @@ const App: React.FC = () => {
   }
 
   if (!session) {
-    return <Login onLoginSuccess={() => {}} />;
+    return <Login onLoginSuccess={() => { }} />;
   }
 
   if (checkingAccess) {
@@ -171,51 +178,52 @@ const App: React.FC = () => {
       <div className="h-screen w-full bg-[#05070A] flex items-center justify-center p-6 overflow-hidden relative">
         <div className="absolute inset-0 bg-gradient-to-b from-red-600/20 via-transparent to-transparent pointer-events-none" />
         <div className="absolute top-0 left-0 w-full h-1 bg-red-600 animate-pulse" />
-        
+
         <div className="max-w-2xl w-full bg-[#0A0D14] rounded-[3rem] p-12 border border-red-500/20 shadow-[0_50px_100px_rgba(220,38,38,0.3)] text-center relative z-10 animate-in zoom-in-95 duration-500">
-           <img 
-              src="https://zdgapmcalocdvdgvbwsj.supabase.co/storage/v1/object/public/AuraLogo/branco.png" 
-              alt="Aura" 
-              className="h-12 mx-auto mb-10 opacity-80"
-           />
+          <img
+            src="https://zdgapmcalocdvdgvbwsj.supabase.co/storage/v1/object/public/AuraLogo/branco.png"
+            alt="Aura"
+            className="h-12 mx-auto mb-10 opacity-80"
+          />
 
-           <div className="w-24 h-24 bg-red-600 rounded-[2rem] flex items-center justify-center text-white mx-auto mb-8 shadow-2xl shadow-red-900/40 animate-bounce">
-              <ShieldAlert size={48} strokeWidth={2.5} />
-           </div>
-           
-           <h1 className="text-5xl font-black text-white uppercase tracking-tighter mb-4 italic leading-tight">
-             SISTEMA BLOQUEADO
-           </h1>
-           
-           <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-6 mb-8 inline-block">
-              <p className="text-red-500 font-black uppercase text-xs tracking-widest">
-                ID INSTÂNCIA: {TARGET_COMPANY_ID.substring(0, 8)}
-              </p>
-           </div>
+          <div className="w-24 h-24 bg-red-600 rounded-[2rem] flex items-center justify-center text-white mx-auto mb-8 shadow-2xl shadow-red-900/40 animate-bounce">
+            <ShieldAlert size={48} strokeWidth={2.5} />
+          </div>
 
-           <p className="text-slate-400 text-lg font-medium mb-10 leading-relaxed max-w-lg mx-auto">
-             O acesso da empresa <span className="text-white font-black">{currentCompanyName || 'CARLOS GABRIEL'}</span> foi suspenso manualmente pela administração central. 
-             <br/><br/>
-             Todos os terminais e acessos mobile foram desativados por precaução de segurança.
-           </p>
+          <h1 className="text-5xl font-black text-white uppercase tracking-tighter mb-4 italic leading-tight">
+            SISTEMA BLOQUEADO
+          </h1>
 
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <button className="flex items-center justify-center space-x-3 bg-white text-slate-900 py-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all active:scale-95">
-                 <PhoneCall size={18} />
-                 <span>Suporte Financeiro</span>
-              </button>
-              <button onClick={() => window.location.reload()} className="flex items-center justify-center space-x-3 bg-red-600/10 border border-red-500/20 text-red-500 py-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all">
-                 <RefreshCcw size={18} />
-                 <span>Re-validar Acesso</span>
-              </button>
-           </div>
+          <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 mb-8 inline-block">
+            <p className="text-red-500 font-black uppercase text-[10px] tracking-[0.2em] flex items-center gap-2">
+              <ShieldAlert size={14} />
+              PENDENTE NA CAKTO PAY
+            </p>
+          </div>
 
-           <div className="mt-12 pt-8 border-t border-white/5 flex flex-col items-center">
-              <div className="flex items-center space-x-2 text-[9px] font-black text-slate-600 uppercase tracking-widest">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-600" />
-                <span>Protocolo de Segurança AURA v4.6</span>
-              </div>
-           </div>
+          <p className="text-slate-400 text-lg font-medium mb-10 leading-relaxed max-w-lg mx-auto">
+            Detectamos que a assinatura da sua empresa <span className="text-white font-black">{currentCompanyName || 'CARLOS GABRIEL'}</span> está <span className="text-red-500 font-black">pendente ou expirada</span> no gateway da Cakto Pay.
+            <br /><br />
+            Para evitar a interrupção definitiva dos serviços, realize a renovação do seu plano.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button className="flex items-center justify-center space-x-3 bg-white text-slate-900 py-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all active:scale-95 shadow-xl shadow-white/10">
+              <CreditCard size={18} />
+              <span>Atualizar Pagamento</span>
+            </button>
+            <button className="flex items-center justify-center space-x-3 bg-red-600/10 border border-red-500/20 text-red-500 py-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all">
+              <PhoneCall size={18} />
+              <span>Falar com Suporte</span>
+            </button>
+          </div>
+
+          <div className="mt-12 pt-8 border-t border-white/5 flex flex-col items-center">
+            <div className="flex items-center space-x-2 text-[9px] font-black text-slate-600 uppercase tracking-widest">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-600" />
+              <span>Protocolo de Segurança AURA v4.6</span>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -226,20 +234,23 @@ const App: React.FC = () => {
       case View.DASHBOARD: return <Dashboard />;
       case View.USERS: return <UsersList />;
       case View.COMPANIES: return <CompaniesList />;
+      case View.PARTNERS: return <PartnersView />;
       case View.FINANCE: return <FinanceView />;
       case View.SUBSCRIPTIONS: return <SubscriptionsView />;
+      case View.PLANS: return <PlansView />;
       case View.TEAM: return <TeamView />;
       case View.LOG: return <LogsView />;
       case View.SUPPORT: return <SupportView />;
+      case View.MARKETING: return <MarketingView />;
       default: return <Dashboard />;
     }
   };
 
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-[#05070A] text-slate-900 dark:text-gray-100 overflow-hidden transition-colors duration-300">
-      <Sidebar 
-        activeView={currentView} 
-        setView={setCurrentView} 
+      <Sidebar
+        activeView={currentView}
+        setView={setCurrentView}
         isCollapsed={isSidebarCollapsed}
         setIsCollapsed={setIsSidebarCollapsed}
         theme={theme}
