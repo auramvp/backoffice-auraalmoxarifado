@@ -3,14 +3,14 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 
 const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
 interface InviteRequest {
-    email: string
-    name: string
-    inviteLink: string
+  email: string
+  name: string
+  inviteLink: string
 }
 
 const htmlTemplate = (link: string, name: string) => `
@@ -60,58 +60,58 @@ const htmlTemplate = (link: string, name: string) => `
 `
 
 serve(async (req) => {
-    // Handle CORS
-    if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders })
+  // Handle CORS
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
+  try {
+    const { email, name, inviteLink }: InviteRequest = await req.json()
+
+    if (!email || !inviteLink) {
+      throw new Error('Email and inviteLink are required')
     }
 
-    try {
-        const { email, name, inviteLink }: InviteRequest = await req.json()
-
-        if (!email || !inviteLink) {
-            throw new Error('Email and inviteLink are required')
-        }
-
-        if (!RESEND_API_KEY) {
-            console.error('RESEND_API_KEY is not set')
-            throw new Error('Server configuration error')
-        }
-
-        const res = await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${RESEND_API_KEY}`,
-            },
-            body: JSON.stringify({
-                from: 'Aura Partners <onboarding@resend.dev>', // Update this if user has a custom domain
-                to: email,
-                subject: 'Convite para Aura Partners',
-                html: htmlTemplate(inviteLink, name || 'Parceiro'),
-            }),
-        })
-
-        const data = await res.json()
-
-        if (!res.ok) {
-            console.error('Resend API Error:', data)
-            throw new Error(data.message || 'Failed to send email')
-        }
-
-        return new Response(
-            JSON.stringify({ message: 'Email sent successfully', id: data.id }),
-            {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 200,
-            },
-        )
-    } catch (error: any) {
-        return new Response(
-            JSON.stringify({ error: error.message }),
-            {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 400,
-            },
-        )
+    if (!RESEND_API_KEY) {
+      console.error('RESEND_API_KEY is not set')
+      throw new Error('Server configuration error')
     }
+
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: 'Aura Partners <time@auraalmoxarifado.com.br>',
+        to: email,
+        subject: 'Convite para Aura Partners',
+        html: htmlTemplate(inviteLink, name || 'Parceiro'),
+      }),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      console.error('Resend API Error:', data)
+      throw new Error(data.message || 'Failed to send email')
+    }
+
+    return new Response(
+      JSON.stringify({ message: 'Email sent successfully', id: data.id }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      },
+    )
+  } catch (error: any) {
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      },
+    )
+  }
 })
