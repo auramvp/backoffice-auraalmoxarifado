@@ -238,7 +238,7 @@ export const PartnersView: React.FC = () => {
             }
 
             // Generate invite link
-            const generatedLink = `https://auraalmoxarifado.com.br/registro?cnpj=${cleanedCnpj}&email=${encodeURIComponent(email)}`;
+            const generatedLink = `https://app.auraalmoxarifado.com.br/#/registro-parceiro?email=${encodeURIComponent(email)}&cnpj=${cleanedCnpj}&name=${encodeURIComponent(nomeFantasia)}`;
             setInviteLink(generatedLink);
 
             // Re-fetch list to be safe, though it shouldn't show the pending one
