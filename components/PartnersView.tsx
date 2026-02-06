@@ -239,6 +239,22 @@ export const PartnersView: React.FC = () => {
 
             // Generate invite link
             const generatedLink = `https://app.auraalmoxarifado.com.br/#/registro-parceiro?email=${encodeURIComponent(email)}&cnpj=${cleanedCnpj}&name=${encodeURIComponent(nomeFantasia)}`;
+
+            // Send email via Edge Function
+            const { error: fnError } = await supabase.functions.invoke('invite-partner', {
+                body: {
+                    email,
+                    name: nomeFantasia,
+                    inviteLink: generatedLink
+                }
+            });
+
+            if (fnError) {
+                console.error('Error sending invite email:', fnError);
+                // Don't block the UI, just log it, or maybe show a warning?
+                // For now, we proceed as the link is generated.
+            }
+
             setInviteLink(generatedLink);
 
             // Re-fetch list to be safe, though it shouldn't show the pending one
@@ -595,8 +611,8 @@ export const PartnersView: React.FC = () => {
                                         <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center text-white mx-auto mb-3 shadow-lg shadow-emerald-900/20">
                                             <CheckCircle2 size={24} />
                                         </div>
-                                        <h4 className="text-lg font-black text-emerald-500 uppercase tracking-tight mb-1">Convite Gerado!</h4>
-                                        <p className="text-xs text-slate-500 font-medium">Copie o link abaixo e envie para o parceiro concluir o cadastro.</p>
+                                        <h4 className="text-lg font-black text-emerald-500 uppercase tracking-tight mb-1">Convite Enviado!</h4>
+                                        <p className="text-xs text-slate-500 font-medium">Um email foi enviado para o parceiro. Você também pode copiar o link abaixo.</p>
                                     </div>
 
                                     <div className="space-y-2">
