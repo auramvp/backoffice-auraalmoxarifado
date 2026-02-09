@@ -305,30 +305,7 @@ export const SubscriptionsView: React.FC = () => {
         <QuickStat label="Inadimplência" value={`R$ ${metrics.overdueValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} sub={`${metrics.overdueCount} faturas`} warning />
       </div>
 
-      {/* Plans Section */}
-      {plans.length > 0 && (
-        <div className="bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5 p-5 shadow-sm">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-blue-600/10 rounded-xl text-blue-500">
-              <Package size={18} />
-            </div>
-            <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">Planos Disponíveis</h3>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {plans.map(plan => (
-              <div key={plan.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 flex items-center justify-between group hover:border-blue-500/30 transition-all">
-                <div>
-                  <p className="text-xs font-bold text-slate-900 dark:text-white">{plan.name}</p>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">Mensal</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-black text-blue-600 dark:text-blue-400">R$ {plan.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Plans Section Removed */}
 
       {/* Main Table Container */}
       <div className="bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5 shadow-2xl overflow-hidden min-h-[600px]">
@@ -527,8 +504,8 @@ const InfoCard: React.FC<{ label: string, value: string, icon: any, warning?: bo
 
 const RecoveryButton: React.FC<{ icon: any, label: string, onClick: () => void, primary?: boolean, success?: boolean }> = ({ icon: Icon, label, onClick, primary, success }) => (
   <button onClick={onClick} className={`flex items-center space-x-3 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-left flex-1 min-w-[180px] lg:flex-initial ${primary ? 'bg-blue-600 text-white hover:bg-blue-500' :
-      success ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white' :
-        'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+    success ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white' :
+      'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
     }`}>
     <Icon size={14} />
     <span>{label}</span>
