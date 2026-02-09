@@ -197,14 +197,14 @@ const App: React.FC = () => {
           <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 mb-8 inline-block">
             <p className="text-red-500 font-black uppercase text-[10px] tracking-[0.2em] flex items-center gap-2">
               <ShieldAlert size={14} />
-              PENDENTE NA CAKTO PAY
+              PENDÊNCIA FINANCEIRA
             </p>
           </div>
 
           <p className="text-slate-400 text-lg font-medium mb-10 leading-relaxed max-w-lg mx-auto">
-            Detectamos que a assinatura da sua empresa <span className="text-white font-black">{currentCompanyName || 'CARLOS GABRIEL'}</span> está <span className="text-red-500 font-black">pendente ou expirada</span> no gateway da Cakto Pay.
+            Detectamos que a assinatura da sua empresa <span className="text-white font-black">{currentCompanyName || 'CARLOS GABRIEL'}</span> está <span className="text-red-500 font-black">pendente ou expirada</span>.
             <br /><br />
-            Para evitar a interrupção definitiva dos serviços, realize a renovação do seu plano.
+            Para evitar a interrupção definitiva dos serviços, regularize seu pagamento junto ao nosso setor financeiro.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

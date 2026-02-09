@@ -251,8 +251,19 @@ export const PartnersView: React.FC = () => {
 
             if (fnError) {
                 console.error('Error sending invite email:', fnError);
-                // Don't block the UI, just log it, or maybe show a warning?
-                // For now, we proceed as the link is generated.
+                // Parse the custom error message if possible, otherwise use default
+                let errorMessage = fnError.message || 'Erro desconhecido ao enviar email';
+
+                // Try to extract my custom json error if it's embedded
+                try {
+                    if (fnError instanceof Error && 'context' in fnError) {
+                        // Sometimes Supabase wraps the response body in context
+                        const body = await (fnError as any).context.json();
+                        if (body.error) errorMessage = body.error;
+                    }
+                } catch (e) { /* ignore */ }
+
+                throw new Error(`Erro no envio de email: ${errorMessage}`);
             }
 
             setInviteLink(generatedLink);

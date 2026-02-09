@@ -1,15 +1,15 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Zap, 
-  Search, 
-  Filter, 
-  MoreHorizontal, 
-  ShieldCheck, 
-  AlertTriangle, 
-  Ban, 
-  Clock, 
-  DollarSign, 
+import {
+  Zap,
+  Search,
+  Filter,
+  MoreHorizontal,
+  ShieldCheck,
+  AlertTriangle,
+  Ban,
+  Clock,
+  DollarSign,
   Download,
   Building2,
   ChevronRight,
@@ -99,17 +99,18 @@ export const SubscriptionsView: React.FC = () => {
 
   const handleSyncPlans = async () => {
     try {
-      notify("Sincronizando planos com a Cakto...");
-      // Chama o webhook para sincronizar
-      await fetch('https://zdgapmcalocdvdgvbwsj.supabase.co/functions/v1/cakto-webhook?action=sync_plans', {
-        method: 'POST'
+      notify("Sincronizando clientes e pagamentos com Asaas...");
+      // Chama a API do Asaas para sincronizar clientes
+      await fetch('https://zdgapmcalocdvdgvbwsj.supabase.co/functions/v1/asaas-api?action=sync_customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
       });
-      
-      notify("Sincronização concluída! Atualizando lista...");
+
+      notify("Sincronização iniciada! Os dados serão atualizados em breve.");
       fetchPlans();
     } catch (e) {
       console.error("Erro ao sincronizar", e);
-      notify("Erro ao sincronizar planos.");
+      notify("Erro ao sincronizar com Asaas.");
     }
   };
 
@@ -117,7 +118,7 @@ export const SubscriptionsView: React.FC = () => {
     try {
       setLoading(true);
       const { data, error } = await supabase.from('subscriptions').select('*');
-      
+
       if (error) {
         console.error('Erro ao buscar assinaturas:', error);
         return;
@@ -128,10 +129,10 @@ export const SubscriptionsView: React.FC = () => {
           // Cálculo simples de dias de atraso baseado na data de próxima cobrança se estiver atrasado
           let daysOverdue = 0;
           if (sub.next_billing && (sub.status === 'overdue' || sub.status === 'blocked')) {
-             const billingDate = new Date(sub.next_billing);
-             const today = new Date();
-             const diffTime = Math.abs(today.getTime() - billingDate.getTime());
-             daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+            const billingDate = new Date(sub.next_billing);
+            const today = new Date();
+            const diffTime = Math.abs(today.getTime() - billingDate.getTime());
+            daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
           }
 
           return {
@@ -148,7 +149,7 @@ export const SubscriptionsView: React.FC = () => {
             failureReason: sub.failure_reason
           };
         });
-        
+
         setSubscribers(formattedSubscribers);
         calculateMetrics(formattedSubscribers);
       }
@@ -163,11 +164,11 @@ export const SubscriptionsView: React.FC = () => {
     // MRR: Soma de ativos, trial e overdue (ainda são clientes pagantes teoricamente)
     const activeSubs = subs.filter(s => ['active', 'trial', 'overdue'].includes(s.status));
     const mrr = activeSubs.reduce((acc, curr) => acc + curr.value, 0);
-    
+
     // Inadimplência: Soma de overdue e blocked
     const overdueSubs = subs.filter(s => ['overdue', 'blocked'].includes(s.status));
     const overdueValue = overdueSubs.reduce((acc, curr) => acc + curr.value, 0);
-    
+
     // Churn: (Cancelados / Total de Clientes que já passaram pela base) * 100
     // Simplificação para este contexto
     const totalCount = subs.length;
@@ -212,7 +213,7 @@ export const SubscriptionsView: React.FC = () => {
     if (!confirmAction) return;
     const { type, subscriber } = confirmAction;
     let message = '';
-    
+
     switch (type) {
       case 'change_plan': message = `Plano de ${subscriber.company} atualizado.`; break;
       case 'force_billing': message = `Cobrança forçada enviada para ${subscriber.company}.`; break;
@@ -224,7 +225,7 @@ export const SubscriptionsView: React.FC = () => {
       case 'send_whatsapp': message = `Link de cobrança enviado via WhatsApp para ${subscriber.company}.`; break;
       case 'temp_access': message = `Acesso temporário de 24h liberado para ${subscriber.company}.`; break;
     }
-    
+
     notify(message);
     setConfirmAction(null);
   };
@@ -257,13 +258,13 @@ export const SubscriptionsView: React.FC = () => {
                 <X size={24} />
               </button>
             </div>
-            
+
             <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2 uppercase tracking-tight">
               {confirmAction.type.replace('_', ' ')}
             </h3>
-            
+
             <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-8 leading-relaxed">
-              Você está prestes a realizar uma ação em <span className="text-white font-bold">{confirmAction.subscriber.company}</span>. 
+              Você está prestes a realizar uma ação em <span className="text-white font-bold">{confirmAction.subscriber.company}</span>.
               Esta operação será registrada no log de auditoria. Deseja continuar?
             </p>
 
@@ -282,7 +283,7 @@ export const SubscriptionsView: React.FC = () => {
           <p className="text-slate-500 dark:text-gray-400 font-medium">Controle e auditoria financeira do ecossistema Aura.</p>
         </div>
         <div className="flex items-center space-x-3">
-          <button 
+          <button
             onClick={handleSyncPlans}
             className="bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-white px-6 py-3 rounded-xl font-bold transition-all text-sm flex items-center space-x-2 border border-slate-200 dark:border-white/5"
           >
@@ -331,14 +332,14 @@ export const SubscriptionsView: React.FC = () => {
 
       {/* Main Table Container */}
       <div className="bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5 shadow-2xl overflow-hidden min-h-[600px]">
-        
+
         {/* Search & Filter Bar */}
         <div className="p-4 border-b border-slate-100 dark:border-white/5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-            <input 
-              type="text" 
-              placeholder="Empresa ou CNPJ..." 
+            <input
+              type="text"
+              placeholder="Empresa ou CNPJ..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-slate-50 dark:bg-[#111827] border border-slate-200 dark:border-white/5 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all placeholder:text-slate-600"
@@ -375,7 +376,7 @@ export const SubscriptionsView: React.FC = () => {
 
                 return (
                   <React.Fragment key={sub.id}>
-                    <tr 
+                    <tr
                       onClick={() => isOverdue && setExpandedOverdueId(isExpanded ? null : sub.id)}
                       className={`transition-colors group ${isOverdue ? 'cursor-pointer' : ''} ${isExpanded ? 'bg-white/[0.03]' : 'hover:bg-slate-50/50 dark:hover:bg-white/[0.02]'}`}
                     >
@@ -401,9 +402,9 @@ export const SubscriptionsView: React.FC = () => {
                           <config.icon size={12} strokeWidth={2.5} />
                           <span className="text-[9px] font-black tracking-widest">{config.label}</span>
                           {isOverdue && (
-                             <div className="ml-1 opacity-50">
-                                {isExpanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-                             </div>
+                            <div className="ml-1 opacity-50">
+                              {isExpanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                            </div>
                           )}
                         </div>
                       </td>
@@ -430,14 +431,13 @@ export const SubscriptionsView: React.FC = () => {
                         )}
                       </td>
                       <td className="px-6 py-4 text-right relative">
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setActiveMenu(activeMenu === sub.id ? null : sub.id);
                           }}
-                          className={`p-2 rounded-xl transition-all shadow-sm ${
-                            activeMenu === sub.id ? 'bg-blue-600 text-white' : 'bg-slate-50 dark:bg-white/[0.04] text-slate-500 hover:text-white hover:bg-blue-600'
-                          }`}
+                          className={`p-2 rounded-xl transition-all shadow-sm ${activeMenu === sub.id ? 'bg-blue-600 text-white' : 'bg-slate-50 dark:bg-white/[0.04] text-slate-500 hover:text-white hover:bg-blue-600'
+                            }`}
                         >
                           <MoreHorizontal size={16} />
                         </button>
@@ -493,15 +493,15 @@ export const SubscriptionsView: React.FC = () => {
       {/* Footer Monitor */}
       <div className="bg-[#111827] rounded-3xl p-6 border border-white/5 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="relative z-10 max-w-2xl text-left">
-           <h4 className="text-white font-black text-lg mb-1 flex items-center space-x-2">
-             <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-             <span>Recuperação Inteligente</span>
-           </h4>
-           <p className="text-slate-400 text-xs font-medium">Use as ferramentas acima para reduzir o churn e recuperar faturamento pendente.</p>
+          <h4 className="text-white font-black text-lg mb-1 flex items-center space-x-2">
+            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+            <span>Recuperação Inteligente</span>
+          </h4>
+          <p className="text-slate-400 text-xs font-medium">Use as ferramentas acima para reduzir o churn e recuperar faturamento pendente.</p>
         </div>
         <button className="relative z-10 px-6 py-3 bg-white/5 hover:bg-white/10 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest border border-white/10 transition-all flex items-center space-x-2">
-           <span>Logs de Auditoria</span>
-           <ChevronRight size={14} />
+          <span>Logs de Auditoria</span>
+          <ChevronRight size={14} />
         </button>
       </div>
     </div>
@@ -526,11 +526,10 @@ const InfoCard: React.FC<{ label: string, value: string, icon: any, warning?: bo
 );
 
 const RecoveryButton: React.FC<{ icon: any, label: string, onClick: () => void, primary?: boolean, success?: boolean }> = ({ icon: Icon, label, onClick, primary, success }) => (
-  <button onClick={onClick} className={`flex items-center space-x-3 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-left flex-1 min-w-[180px] lg:flex-initial ${
-    primary ? 'bg-blue-600 text-white hover:bg-blue-500' : 
-    success ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white' : 
-    'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
-  }`}>
+  <button onClick={onClick} className={`flex items-center space-x-3 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-left flex-1 min-w-[180px] lg:flex-initial ${primary ? 'bg-blue-600 text-white hover:bg-blue-500' :
+      success ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white' :
+        'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+    }`}>
     <Icon size={14} />
     <span>{label}</span>
   </button>
