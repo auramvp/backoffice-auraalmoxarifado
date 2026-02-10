@@ -181,17 +181,25 @@ export const FinanceView: React.FC = () => {
     try {
       setSyncing(true);
       const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const { data: { session } } = await supabase.auth.getSession();
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'apikey': anonKey,
+        'Authorization': `Bearer ${session?.access_token || anonKey}`
+      };
 
       // 1. Sync Customers
       await fetch(`${baseUrl}/functions/v1/asaas-api?action=sync_customers`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers
       });
 
       // 2. Sync Financials
       await fetch(`${baseUrl}/functions/v1/asaas-api?action=sync_financials`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers
       });
 
       await fetchFinanceData();

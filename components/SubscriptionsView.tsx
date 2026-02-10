@@ -101,17 +101,25 @@ export const SubscriptionsView: React.FC = () => {
     try {
       notify("Sincronizando clientes e pagamentos com Asaas...");
       const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const { data: { session } } = await supabase.auth.getSession();
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'apikey': anonKey,
+        'Authorization': `Bearer ${session?.access_token || anonKey}`
+      };
 
       // 1. Sincronizar Clientes
       await fetch(`${baseUrl}/functions/v1/asaas-api?action=sync_customers`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers
       });
 
       // 2. Sincronizar Financeiro
       await fetch(`${baseUrl}/functions/v1/asaas-api?action=sync_financials`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers
       });
 
       notify("Sincronização concluída com sucesso!");
