@@ -100,15 +100,16 @@ export const SubscriptionsView: React.FC = () => {
   const handleSyncPlans = async () => {
     try {
       notify("Sincronizando clientes e pagamentos com Asaas...");
+      const baseUrl = import.meta.env.VITE_SUPABASE_URL;
 
       // 1. Sincronizar Clientes
-      await fetch('https://zdgapmcalocdvdgvbwsj.supabase.co/functions/v1/asaas-api?action=sync_customers', {
+      await fetch(`${baseUrl}/functions/v1/asaas-api?action=sync_customers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
 
       // 2. Sincronizar Financeiro
-      await fetch('https://zdgapmcalocdvdgvbwsj.supabase.co/functions/v1/asaas-api?action=sync_financials', {
+      await fetch(`${baseUrl}/functions/v1/asaas-api?action=sync_financials`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
