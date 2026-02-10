@@ -33,10 +33,17 @@ interface Coupon {
     created_at: string;
 }
 
+interface Plan {
+    id: string;
+    name: string;
+    value: number;
+}
+
 export const MarketingView: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'banners' | 'coupons'>('banners');
     const [banners, setBanners] = useState<Banner[]>([]);
     const [coupons, setCoupons] = useState<Coupon[]>([]);
+    const [plans, setPlans] = useState<Plan[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Banner states
@@ -68,6 +75,7 @@ export const MarketingView: React.FC = () => {
 
     useEffect(() => {
         fetchData();
+        fetchPlans(); // Always fetch plans for previews
     }, [activeTab]);
 
     const fetchData = async () => {
@@ -102,6 +110,18 @@ export const MarketingView: React.FC = () => {
             setCoupons(data as Coupon[]);
         }
         setLoading(false);
+    };
+
+    const fetchPlans = async () => {
+        const { data, error } = await supabase
+            .from('plans')
+            .select('id, name, value')
+            .eq('status', 'active')
+            .order('value', { ascending: true });
+
+        if (!error && data) {
+            setPlans(data as Plan[]);
+        }
     };
 
     // --- Banner Actions ---
@@ -209,6 +229,11 @@ export const MarketingView: React.FC = () => {
     const handleSaveCoupon = async () => {
         if (!newCoupon.code || newCoupon.value <= 0) {
             alert('Preencha o código e o valor do desconto');
+            return;
+        }
+
+        if (newCoupon.type === 'percentage' && newCoupon.value > 100) {
+            alert('O desconto percentual não pode ultrapassar 100%');
             return;
         }
 
@@ -550,9 +575,48 @@ export const MarketingView: React.FC = () => {
                                 label={newCoupon.type === 'percentage' ? "Valor do Desconto (%)" : "Valor do Desconto (R$)"}
                                 type="number"
                                 value={newCoupon.value.toString()}
-                                onChange={v => setNewCoupon({ ...newCoupon, value: parseFloat(v) || 0 })}
+                                onChange={v => {
+                                    let val = parseFloat(v) || 0;
+                                    if (newCoupon.type === 'percentage' && val > 100) val = 100;
+                                    setNewCoupon({ ...newCoupon, value: val });
+                                }}
                                 placeholder={newCoupon.type === 'percentage' ? "10" : "50.00"}
                             />
+
+                            {/* Plan Preview */}
+                            <div className="space-y-3 pt-2">
+                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center justify-between">
+                                    <span>Simulação de Preços</span>
+                                    <span className="text-blue-500 bg-blue-500/10 px-1.5 py-0.5 rounded text-[8px]">Novo Valor final</span>
+                                </label>
+                                <div className="grid grid-cols-1 gap-2 bg-slate-50 dark:bg-white/[0.02] p-3 rounded-2xl border border-slate-200 dark:border-white/5 max-h-48 overflow-y-auto">
+                                    {plans.length === 0 ? (
+                                        <p className="text-[10px] text-slate-500 italic text-center py-2">Nenhum plano ativo encontrado</p>
+                                    ) : (
+                                        plans.map(plan => {
+                                            const discount = newCoupon.type === 'percentage'
+                                                ? (plan.value * (newCoupon.value / 100))
+                                                : newCoupon.value;
+                                            const finalValue = Math.max(0, plan.value - discount);
+
+                                            return (
+                                                <div key={plan.id} className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-white/5 last:border-0">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">{plan.name}</span>
+                                                        <span className="text-[8px] text-slate-400">R$ {plan.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                    </div>
+                                                    <div className="flex items-center space-x-2">
+                                                        <ArrowRight size={10} className="text-slate-400" />
+                                                        <span className="text-xs font-black text-emerald-500">
+                                                            R$ {finalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <InputField label="Limite de Usos" type="number" value={newCoupon.max_uses} onChange={v => setNewCoupon({ ...newCoupon, max_uses: v })} placeholder="Ex: 100" />
