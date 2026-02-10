@@ -3,7 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
     Megaphone, Plus, Image, Link2, Clock, Eye, MousePointerClick, Trash2,
     RefreshCcw, X, Upload, Calendar, ExternalLink, BarChart3, TrendingUp,
-    CheckCircle2, AlertTriangle, Loader2
+    CheckCircle2, AlertTriangle, Loader2, Ticket, Percent, DollarSign as DollarIcon,
+    ChevronRight, ArrowRight, Tag, ArrowRightLeft
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -20,14 +21,28 @@ interface Banner {
     created_at: string;
 }
 
-export const MarketingView: React.FC = () => {
-    const [banners, setBanners] = useState<Banner[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [showModal, setShowModal] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [uploading, setUploading] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+interface Coupon {
+    id: string;
+    code: string;
+    type: 'fixed' | 'percentage';
+    value: number;
+    is_active: boolean;
+    max_uses: number | null;
+    current_uses: number;
+    end_date: string | null;
+    created_at: string;
+}
 
+export const MarketingView: React.FC = () => {
+    const [activeTab, setActiveTab] = useState<'banners' | 'coupons'>('banners');
+    const [banners, setBanners] = useState<Banner[]>([]);
+    const [coupons, setCoupons] = useState<Coupon[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    // Banner states
+    const [showBannerModal, setShowBannerModal] = useState(false);
+    const [savingBanner, setSavingBanner] = useState(false);
+    const [uploading, setUploading] = useState(false);
     const [newBanner, setNewBanner] = useState({
         title: '',
         image_url: '',
@@ -36,12 +51,32 @@ export const MarketingView: React.FC = () => {
         end_date: '',
         is_active: true
     });
-
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Coupon states
+    const [showCouponModal, setShowCouponModal] = useState(false);
+    const [savingCoupon, setSavingCoupon] = useState(false);
+    const [newCoupon, setNewCoupon] = useState({
+        code: '',
+        type: 'percentage' as 'fixed' | 'percentage',
+        value: 0,
+        max_uses: '',
+        end_date: '',
+        is_active: true
+    });
 
     useEffect(() => {
-        fetchBanners();
-    }, []);
+        fetchData();
+    }, [activeTab]);
+
+    const fetchData = async () => {
+        if (activeTab === 'banners') {
+            await fetchBanners();
+        } else {
+            await fetchCoupons();
+        }
+    };
 
     const fetchBanners = async () => {
         setLoading(true);
@@ -56,47 +91,51 @@ export const MarketingView: React.FC = () => {
         setLoading(false);
     };
 
+    const fetchCoupons = async () => {
+        setLoading(true);
+        const { data, error } = await supabase
+            .from('coupons')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (!error && data) {
+            setCoupons(data as Coupon[]);
+        }
+        setLoading(false);
+    };
+
+    // --- Banner Actions ---
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
         setUploading(true);
-
-        // Preview local
         const reader = new FileReader();
         reader.onloadend = () => {
             setPreviewImage(reader.result as string);
         };
         reader.readAsDataURL(file);
 
-        // Upload to Supabase Storage
         const fileExt = file.name.split('.').pop();
         const fileName = `banner_${Date.now()}.${fileExt}`;
         const filePath = `banners/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
             .from('marketing')
-            .upload(filePath, file, {
-                upsert: true
-            });
+            .upload(filePath, file, { upsert: true });
 
         if (uploadError) {
-            console.error('Upload error details:', uploadError);
             alert('Erro ao fazer upload: ' + uploadError.message);
             setUploading(false);
             return;
         }
 
-        // Get public URL
         const { data: urlData } = supabase.storage
             .from('marketing')
             .getPublicUrl(filePath);
 
         if (urlData?.publicUrl) {
-            console.log('Public URL generated:', urlData.publicUrl);
             setNewBanner(prev => ({ ...prev, image_url: urlData.publicUrl }));
-        } else {
-            alert('Erro ao gerar URL pública da imagem');
         }
         setUploading(false);
     };
@@ -107,11 +146,9 @@ export const MarketingView: React.FC = () => {
             return;
         }
 
-        setSaving(true);
-
+        setSavingBanner(true);
         const { data: { user } } = await supabase.auth.getUser();
 
-        // Limpa o link de destino se for apenas o prefixo padrão ou vazio
         const cleanDestinationUrl = newBanner.destination_url.trim() === 'https://' || !newBanner.destination_url.trim()
             ? null
             : newBanner.destination_url.trim();
@@ -131,16 +168,15 @@ export const MarketingView: React.FC = () => {
 
         if (!error && data) {
             setBanners([data[0] as Banner, ...banners]);
-            setShowModal(false);
-            resetForm();
+            setShowBannerModal(false);
+            resetBannerForm();
         } else {
             alert('Erro ao salvar banner: ' + error?.message);
         }
-
-        setSaving(false);
+        setSavingBanner(false);
     };
 
-    const resetForm = () => {
+    const resetBannerForm = () => {
         setNewBanner({
             title: '',
             image_url: '',
@@ -165,17 +201,69 @@ export const MarketingView: React.FC = () => {
 
     const deleteBanner = async (id: string) => {
         if (!confirm('Tem certeza que deseja excluir este banner?')) return;
+        const { error } = await supabase.from('banners').delete().eq('id', id);
+        if (!error) setBanners(banners.filter(b => b.id !== id));
+    };
 
+    // --- Coupon Actions ---
+    const handleSaveCoupon = async () => {
+        if (!newCoupon.code || newCoupon.value <= 0) {
+            alert('Preencha o código e o valor do desconto');
+            return;
+        }
+
+        setSavingCoupon(true);
+        const { data, error } = await supabase
+            .from('coupons')
+            .insert([{
+                code: newCoupon.code.toUpperCase().replace(/\s/g, ''),
+                type: newCoupon.type,
+                value: newCoupon.value,
+                max_uses: newCoupon.max_uses ? parseInt(newCoupon.max_uses) : null,
+                end_date: newCoupon.end_date || null,
+                is_active: newCoupon.is_active
+            }])
+            .select();
+
+        if (!error && data) {
+            setCoupons([data[0] as Coupon, ...coupons]);
+            setShowCouponModal(false);
+            resetCouponForm();
+        } else {
+            alert('Erro ao salvar cupom: ' + error?.message);
+        }
+        setSavingCoupon(false);
+    };
+
+    const resetCouponForm = () => {
+        setNewCoupon({
+            code: '',
+            type: 'percentage',
+            value: 0,
+            max_uses: '',
+            end_date: '',
+            is_active: true
+        });
+    };
+
+    const toggleCouponStatus = async (id: string, currentStatus: boolean) => {
         const { error } = await supabase
-            .from('banners')
-            .delete()
+            .from('coupons')
+            .update({ is_active: !currentStatus })
             .eq('id', id);
 
         if (!error) {
-            setBanners(banners.filter(b => b.id !== id));
+            setCoupons(coupons.map(c => c.id === id ? { ...c, is_active: !currentStatus } : c));
         }
     };
 
+    const deleteCoupon = async (id: string) => {
+        if (!confirm('Tem certeza que deseja excluir este cupom?')) return;
+        const { error } = await supabase.from('coupons').delete().eq('id', id);
+        if (!error) setCoupons(coupons.filter(c => c.id !== id));
+    };
+
+    // --- Stats Helpers ---
     const totalClicks = banners.reduce((acc, b) => acc + b.clicks, 0);
     const totalImpressions = banners.reduce((acc, b) => acc + b.impressions, 0);
     const activeBanners = banners.filter(b => b.is_active).length;
@@ -187,7 +275,7 @@ export const MarketingView: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+        <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 pb-12">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
@@ -200,342 +288,282 @@ export const MarketingView: React.FC = () => {
                         </h2>
                     </div>
                     <p className="text-slate-500 dark:text-gray-400 font-medium">
-                        Gerencie banners e campanhas do aplicativo.
+                        Gerencie banners e campanhas de cupons do ecossistema.
                     </p>
                 </div>
 
                 <div className="flex items-center space-x-3">
+                    <div className="flex bg-white dark:bg-[#0F172A] p-1 rounded-xl border border-slate-200 dark:border-white/10 mr-2">
+                        <button
+                            onClick={() => setActiveTab('banners')}
+                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center space-x-2 ${activeTab === 'banners' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
+                        >
+                            <Image size={14} />
+                            <span>Banners</span>
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('coupons')}
+                            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center space-x-2 ${activeTab === 'coupons' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
+                        >
+                            <Ticket size={14} />
+                            <span>Cupons</span>
+                        </button>
+                    </div>
+
                     <button
-                        onClick={fetchBanners}
+                        onClick={activeTab === 'banners' ? fetchBanners : fetchCoupons}
                         className="p-2.5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-500/10 transition-all"
                     >
                         <RefreshCcw size={18} className={loading ? 'animate-spin' : ''} />
                     </button>
 
                     <button
-                        onClick={() => { setShowModal(true); resetForm(); }}
+                        onClick={() => { activeTab === 'banners' ? setShowBannerModal(true) : setShowCouponModal(true); activeTab === 'banners' ? resetBannerForm() : resetCouponForm(); }}
                         className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-xl font-bold text-sm hover:from-blue-500 hover:to-indigo-600 transition-all flex items-center space-x-2 shadow-lg shadow-blue-900/30"
                     >
                         <Plus size={18} />
-                        <span>Novo Banner</span>
+                        <span>{activeTab === 'banners' ? 'Novo Banner' : 'Novo Cupom'}</span>
                     </button>
                 </div>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-white dark:bg-[#0A0D14] p-5 rounded-2xl border border-slate-200 dark:border-white/5">
-                    <div className="flex items-center space-x-3">
-                        <div className="p-2.5 bg-blue-500/10 rounded-xl text-blue-500">
-                            <Image size={20} />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-black text-slate-900 dark:text-white">{banners.length}</p>
-                            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Total Banners</p>
-                        </div>
+            {activeTab === 'banners' ? (
+                <>
+                    {/* Banners Stats */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <StatsCard icon={Image} label="Total Banners" value={banners.length} blue />
+                        <StatsCard icon={CheckCircle2} label="Ativos" value={activeBanners} green />
+                        <StatsCard icon={MousePointerClick} label="Total Cliques" value={totalClicks.toLocaleString()} blueSecondary />
+                        <StatsCard icon={TrendingUp} label="CTR Médio" value={`${avgCTR}%`} orange />
                     </div>
-                </div>
 
-                <div className="bg-white dark:bg-[#0A0D14] p-5 rounded-2xl border border-slate-200 dark:border-white/5">
-                    <div className="flex items-center space-x-3">
-                        <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-500">
-                            <CheckCircle2 size={20} />
+                    {/* Banners Grid */}
+                    {loading ? (
+                        <LoadingState text="Carregando banners..." />
+                    ) : banners.length === 0 ? (
+                        <EmptyState icon={Megaphone} title="Nenhum Banner" description="Crie seu primeiro banner clicando no botão acima." />
+                    ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+                            {banners.map((banner) => (
+                                <div key={banner.id} className="bg-white dark:bg-[#0A0D14] rounded-2xl border border-slate-200 dark:border-white/5 overflow-hidden group hover:border-blue-500/30 transition-all">
+                                    <div className="relative aspect-[16/9] bg-slate-100 dark:bg-white/5 overflow-hidden">
+                                        <img src={banner.image_url} alt={banner.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                        <div className="absolute top-3 right-3">
+                                            <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${banner.is_active ? 'bg-emerald-500 text-white' : 'bg-slate-500 text-white'}`}>
+                                                {banner.is_active ? 'Ativo' : 'Inativo'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="p-4">
+                                        <h3 className="font-bold text-slate-900 dark:text-white mb-2 truncate">{banner.title}</h3>
+                                        {banner.destination_url && (
+                                            <a href={banner.destination_url} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-1 text-xs text-blue-500 hover:text-blue-400 mb-3 truncate">
+                                                <Link2 size={12} />
+                                                <span className="truncate">{banner.destination_url}</span>
+                                            </a>
+                                        )}
+                                        <div className="grid grid-cols-2 gap-2 mb-3">
+                                            <div className="bg-slate-50 dark:bg-white/5 p-2 rounded-lg text-center">
+                                                <p className="text-sm font-bold text-slate-900 dark:text-white">{banner.clicks.toLocaleString()}</p>
+                                                <p className="text-[8px] text-slate-500 uppercase font-bold">Cliques</p>
+                                            </div>
+                                            <div className="bg-slate-50 dark:bg-white/5 p-2 rounded-lg text-center">
+                                                <p className="text-sm font-bold text-slate-900 dark:text-white">{banner.impressions.toLocaleString()}</p>
+                                                <p className="text-[8px] text-slate-500 uppercase font-bold">Impressões</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-white/5">
+                                            <button onClick={() => toggleBannerStatus(banner.id, banner.is_active)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${banner.is_active ? 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-red-100 hover:text-red-500' : 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white'}`}>
+                                                {banner.is_active ? 'Desativar' : 'Ativar'}
+                                            </button>
+                                            <button onClick={() => deleteBanner(banner.id)} className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                        <div>
-                            <p className="text-2xl font-black text-slate-900 dark:text-white">{activeBanners}</p>
-                            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Ativos</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-[#0A0D14] p-5 rounded-2xl border border-slate-200 dark:border-white/5">
-                    <div className="flex items-center space-x-3">
-                        <div className="p-2.5 bg-blue-500/10 rounded-xl text-blue-500">
-                            <MousePointerClick size={20} />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-black text-slate-900 dark:text-white">{totalClicks.toLocaleString()}</p>
-                            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Total Cliques</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-[#0A0D14] p-5 rounded-2xl border border-slate-200 dark:border-white/5">
-                    <div className="flex items-center space-x-3">
-                        <div className="p-2.5 bg-orange-500/10 rounded-xl text-orange-500">
-                            <TrendingUp size={20} />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-black text-slate-900 dark:text-white">{avgCTR}%</p>
-                            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">CTR Médio</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Banners List */}
-            {loading ? (
-                <div className="py-20 text-center bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5">
-                    <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-sm font-black text-slate-500 uppercase tracking-widest">Carregando banners...</p>
-                </div>
-            ) : banners.length === 0 ? (
-                <div className="py-20 text-center bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5">
-                    <div className="p-4 bg-blue-500/10 rounded-full w-fit mx-auto mb-4">
-                        <Megaphone size={32} className="text-blue-500" />
-                    </div>
-                    <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">Nenhum Banner</h3>
-                    <p className="text-sm text-slate-500 mb-6">Crie seu primeiro banner clicando no botão acima.</p>
-                </div>
+                    )}
+                </>
             ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-                    {banners.map((banner) => (
-                        <div
-                            key={banner.id}
-                            className="bg-white dark:bg-[#0A0D14] rounded-2xl border border-slate-200 dark:border-white/5 overflow-hidden group hover:border-blue-500/30 transition-all"
-                        >
-                            {/* Banner Image */}
-                            <div className="relative aspect-[16/9] bg-slate-100 dark:bg-white/5 overflow-hidden">
-                                <img
-                                    src={banner.image_url}
-                                    alt={banner.title}
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                />
-                                <div className="absolute top-3 right-3">
-                                    <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${banner.is_active
-                                        ? 'bg-emerald-500 text-white'
-                                        : 'bg-slate-500 text-white'
-                                        }`}>
-                                        {banner.is_active ? 'Ativo' : 'Inativo'}
-                                    </span>
-                                </div>
-                            </div>
+                <>
+                    {/* Coupons Stats */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <StatsCard icon={Ticket} label="Total Cupons" value={coupons.length} blue />
+                        <StatsCard icon={CheckCircle2} label="Cupons Ativos" value={coupons.filter(c => c.is_active).length} green />
+                        <StatsCard icon={ArrowRightLeft} label="Usos Totais" value={coupons.reduce((acc, c) => acc + c.current_uses, 0)} blueSecondary />
+                        <StatsCard icon={TrendingUp} label="Taxa de Uso" value={`${coupons.length > 0 ? (coupons.reduce((acc, c) => acc + (c.current_uses > 0 ? 1 : 0), 0) / coupons.length * 100).toFixed(0) : 0}%`} orange />
+                    </div>
 
-                            {/* Banner Info */}
-                            <div className="p-4">
-                                <h3 className="font-bold text-slate-900 dark:text-white mb-2 truncate">
-                                    {banner.title}
-                                </h3>
-
-                                {banner.destination_url && (
-                                    <a
-                                        href={banner.destination_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center space-x-1 text-xs text-blue-500 hover:text-blue-400 mb-3 truncate"
-                                    >
-                                        <Link2 size={12} />
-                                        <span className="truncate">{banner.destination_url}</span>
-                                    </a>
-                                )}
-
-                                {/* Stats */}
-                                <div className="grid grid-cols-2 gap-2 mb-3">
-                                    <div className="bg-slate-50 dark:bg-white/5 p-2 rounded-lg text-center">
-                                        <p className="text-sm font-bold text-slate-900 dark:text-white">{banner.clicks.toLocaleString()}</p>
-                                        <p className="text-[8px] text-slate-500 uppercase font-bold">Cliques</p>
-                                    </div>
-                                    <div className="bg-slate-50 dark:bg-white/5 p-2 rounded-lg text-center">
-                                        <p className="text-sm font-bold text-slate-900 dark:text-white">{banner.impressions.toLocaleString()}</p>
-                                        <p className="text-[8px] text-slate-500 uppercase font-bold">Impressões</p>
-                                    </div>
-                                </div>
-
-                                {/* Schedule */}
-                                {(banner.start_date || banner.end_date) && (
-                                    <div className="flex items-center space-x-2 text-[10px] text-slate-500 mb-3">
-                                        <Clock size={12} />
-                                        <span>
-                                            {banner.start_date ? formatDate(banner.start_date) : '...'} até {banner.end_date ? formatDate(banner.end_date) : '...'}
-                                        </span>
-                                    </div>
-                                )}
-
-                                {/* Actions */}
-                                <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-white/5">
-                                    <button
-                                        onClick={() => toggleBannerStatus(banner.id, banner.is_active)}
-                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${banner.is_active
-                                            ? 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-red-100 hover:text-red-500'
-                                            : 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white'
-                                            }`}
-                                    >
-                                        {banner.is_active ? 'Desativar' : 'Ativar'}
-                                    </button>
-                                    <button
-                                        onClick={() => deleteBanner(banner.id)}
-                                        className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
-                                </div>
+                    {/* Coupons List */}
+                    {loading ? (
+                        <LoadingState text="Carregando cupons..." />
+                    ) : coupons.length === 0 ? (
+                        <EmptyState icon={Ticket} title="Nenhum Cupom" description="Crie seu primeiro cupom promocional clicando no botão acima." />
+                    ) : (
+                        <div className="bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5 overflow-hidden shadow-xl">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="bg-slate-50 dark:bg-white/[0.02] border-b border-slate-100 dark:border-white/5">
+                                            <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 tracking-widest">Código</th>
+                                            <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 tracking-widest">Desconto</th>
+                                            <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 tracking-widest text-center">Uso / Limite</th>
+                                            <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 tracking-widest text-center">Status</th>
+                                            <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 tracking-widest">Expiração</th>
+                                            <th className="px-6 py-4"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50 dark:divide-white/5">
+                                        {coupons.map((coupon) => (
+                                            <tr key={coupon.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-colors group">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center space-x-3">
+                                                        <div className="w-8 h-8 rounded-lg bg-blue-600/10 flex items-center justify-center text-blue-500 border border-blue-500/20">
+                                                            <Tag size={16} />
+                                                        </div>
+                                                        <span className="font-black text-slate-900 dark:text-white tracking-widest uppercase">{coupon.code}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center space-x-1.5">
+                                                        {coupon.type === 'percentage' ? <Percent size={14} className="text-emerald-500" /> : <DollarIcon size={14} className="text-emerald-500" />}
+                                                        <span className="font-bold text-slate-900 dark:text-white">
+                                                            {coupon.type === 'percentage' ? `${coupon.value}%` : `R$ ${Number(coupon.value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <div className="flex flex-col items-center">
+                                                        <span className="text-xs font-black text-slate-900 dark:text-white">{coupon.current_uses} / {coupon.max_uses || '∞'}</span>
+                                                        <div className="w-20 h-1 bg-slate-200 dark:bg-white/5 rounded-full mt-1 overflow-hidden">
+                                                            <div
+                                                                className="h-full bg-blue-500"
+                                                                style={{ width: `${coupon.max_uses ? Math.min((coupon.current_uses / coupon.max_uses) * 100, 100) : 5}%` }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <button
+                                                        onClick={() => toggleCouponStatus(coupon.id, coupon.is_active)}
+                                                        className={`px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase border ${coupon.is_active ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-slate-500/10 text-slate-500 border-slate-500/20'}`}
+                                                    >
+                                                        {coupon.is_active ? 'Ativo' : 'Inativo'}
+                                                    </button>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center space-x-2 text-xs text-slate-500">
+                                                        <Calendar size={12} />
+                                                        <span>{formatDate(coupon.end_date || '')}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <button onClick={() => deleteCoupon(coupon.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-                    ))}
-                </div>
+                    )}
+                </>
             )}
 
-            {/* New Banner Modal */}
-            {showModal && (
+            {/* Banner Modal */}
+            {showBannerModal && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#05070A]/80 backdrop-blur-sm animate-in fade-in duration-300">
                     <div className="bg-white dark:bg-[#0F172A] w-full max-w-lg rounded-[2rem] border border-slate-200 dark:border-white/5 shadow-2xl animate-in zoom-in-95 duration-300 overflow-hidden">
-                        {/* Modal Header */}
                         <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
                             <div className="flex items-center space-x-3">
-                                <div className="p-2 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl text-white">
-                                    <Image size={20} />
-                                </div>
+                                <div className="p-2 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl text-white"><Image size={20} /></div>
                                 <div>
                                     <h3 className="text-lg font-black text-slate-900 dark:text-white">Novo Banner</h3>
                                     <p className="text-[10px] text-slate-500">Configure a imagem e programação</p>
                                 </div>
                             </div>
-                            <button
-                                onClick={() => setShowModal(false)}
-                                className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"
-                            >
-                                <X size={20} />
-                            </button>
+                            <button onClick={() => setShowBannerModal(false)} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><X size={20} /></button>
                         </div>
-
-                        {/* Modal Body */}
                         <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-                            {/* Image Upload */}
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                                    Imagem do Banner
-                                </label>
-                                <div
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="border-2 border-dashed border-slate-200 dark:border-white/10 rounded-2xl p-4 text-center cursor-pointer hover:border-blue-500/50 transition-all"
-                                >
-                                    {uploading ? (
-                                        <div className="py-6">
-                                            <Loader2 size={32} className="text-blue-500 animate-spin mx-auto mb-2" />
-                                            <p className="text-xs text-slate-500">Fazendo upload...</p>
-                                        </div>
-                                    ) : previewImage || newBanner.image_url ? (
-                                        <div className="relative">
-                                            <img
-                                                src={previewImage || newBanner.image_url}
-                                                alt="Preview"
-                                                className="w-full h-40 object-cover rounded-xl"
-                                            />
-                                            <p className="text-[10px] text-blue-500 mt-2">Clique para trocar</p>
-                                        </div>
-                                    ) : (
-                                        <div className="py-6">
-                                            <Upload size={32} className="text-slate-400 mx-auto mb-2" />
-                                            <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                                                Clique para fazer upload
-                                            </p>
-                                            <p className="text-[10px] text-slate-400">PNG, JPG, WEBP até 5MB</p>
-                                        </div>
-                                    )}
-                                </div>
-                                <input
-                                    ref={fileInputRef}
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={handleImageUpload}
-                                    className="hidden"
-                                />
+                            <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-slate-200 dark:border-white/10 rounded-2xl p-4 text-center cursor-pointer hover:border-blue-500/50 transition-all">
+                                {uploading ? <LoadingState text="Fazendo upload..." /> : previewImage || newBanner.image_url ? <img src={previewImage || newBanner.image_url} alt="Preview" className="w-full h-40 object-cover rounded-xl" /> : <div className="py-6"><Upload size={32} className="text-slate-400 mx-auto mb-2" /><p className="text-sm font-medium text-slate-600 dark:text-slate-400">Clique para fazer upload</p></div>}
                             </div>
-
-                            {/* Title */}
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                                    Título do Banner
-                                </label>
-                                <input
-                                    type="text"
-                                    value={newBanner.title}
-                                    onChange={(e) => setNewBanner({ ...newBanner, title: e.target.value })}
-                                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl py-2.5 px-4 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                                    placeholder="Ex: Promoção de Natal"
-                                />
-                            </div>
-
-                            {/* Destination URL */}
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                                    Link de Destino
-                                </label>
-                                <div className="relative">
-                                    <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                    <input
-                                        type="text"
-                                        value={newBanner.destination_url}
-                                        onChange={(e) => setNewBanner({ ...newBanner, destination_url: e.target.value })}
-                                        className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                                        placeholder="https://exemplo.com/promocao"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Schedule */}
+                            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                            <InputField label="Título do Banner" value={newBanner.title} onChange={v => setNewBanner({ ...newBanner, title: v })} placeholder="Ex: Promoção de Natal" />
+                            <InputField label="Link de Destino" icon={Link2} value={newBanner.destination_url} onChange={v => setNewBanner({ ...newBanner, destination_url: v })} placeholder="https://exemplo.com/promocao" />
                             <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                                        Data Início
-                                    </label>
-                                    <div className="relative">
-                                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                        <input
-                                            type="date"
-                                            value={newBanner.start_date}
-                                            onChange={(e) => setNewBanner({ ...newBanner, start_date: e.target.value })}
-                                            className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                                        />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                                        Data Fim
-                                    </label>
-                                    <div className="relative">
-                                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                        <input
-                                            type="date"
-                                            value={newBanner.end_date}
-                                            onChange={(e) => setNewBanner({ ...newBanner, end_date: e.target.value })}
-                                            className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Active Toggle */}
-                            <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-white/5 rounded-xl">
-                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Ativar imediatamente</span>
-                                <button
-                                    onClick={() => setNewBanner({ ...newBanner, is_active: !newBanner.is_active })}
-                                    className={`w-12 h-6 rounded-full transition-all ${newBanner.is_active ? 'bg-blue-600' : 'bg-slate-300 dark:bg-white/10'}`}
-                                >
-                                    <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${newBanner.is_active ? 'translate-x-6' : 'translate-x-0.5'}`} />
-                                </button>
+                                <InputField label="Data Início" icon={Calendar} type="date" value={newBanner.start_date} onChange={v => setNewBanner({ ...newBanner, start_date: v })} />
+                                <InputField label="Data Fim" icon={Calendar} type="date" value={newBanner.end_date} onChange={v => setNewBanner({ ...newBanner, end_date: v })} />
                             </div>
                         </div>
-
-                        {/* Modal Footer */}
                         <div className="p-6 border-t border-slate-100 dark:border-white/5 flex justify-end space-x-3">
-                            <button
-                                onClick={() => setShowModal(false)}
-                                className="px-5 py-2.5 text-slate-500 hover:text-slate-700 dark:hover:text-white font-bold text-sm transition-colors"
-                            >
-                                Cancelar
+                            <button onClick={() => setShowBannerModal(false)} className="px-5 py-2.5 text-slate-500 hover:text-white font-bold text-sm transition-colors">Cancelar</button>
+                            <button onClick={handleSaveBanner} disabled={savingBanner || uploading || !newBanner.title || !newBanner.image_url} className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-xl font-bold text-sm flex items-center space-x-2 shadow-lg disabled:opacity-50">
+                                {savingBanner ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                                <span>{savingBanner ? 'Salvando...' : 'Criar Banner'}</span>
                             </button>
-                            <button
-                                onClick={handleSaveBanner}
-                                disabled={saving || uploading || !newBanner.title || !newBanner.image_url}
-                                className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-xl font-bold text-sm hover:from-blue-500 hover:to-indigo-600 transition-all flex items-center space-x-2 shadow-lg shadow-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed group"
-                            >
-                                {saving ? (
-                                    <Loader2 size={16} className="animate-spin" />
-                                ) : (
-                                    <Plus size={16} className="group-active:scale-90 transition-transform" />
-                                )}
-                                <span>{saving ? 'Salvando...' : 'Criar Banner'}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Coupon Modal */}
+            {showCouponModal && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#05070A]/80 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-[#0F172A] w-full max-w-md rounded-[2rem] border border-slate-200 dark:border-white/5 shadow-2xl animate-in zoom-in-95 duration-300 overflow-hidden">
+                        <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
+                            <div className="flex items-center space-x-3 text-blue-500">
+                                <div className="p-2 bg-blue-600/10 rounded-xl"><Ticket size={20} /></div>
+                                <div>
+                                    <h3 className="text-lg font-black text-slate-900 dark:text-white">Novo Cupom</h3>
+                                    <p className="text-[10px] text-slate-500">Defina as regras do desconto</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowCouponModal(false)} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><X size={20} /></button>
+                        </div>
+                        <div className="p-6 space-y-5">
+                            <InputField label="Código do Cupom" value={newCoupon.code} onChange={v => setNewCoupon({ ...newCoupon, code: v.toUpperCase() })} placeholder="EX: AURA10" />
+
+                            <div className="space-y-2">
+                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Tipo de Desconto</label>
+                                <div className="flex bg-slate-50 dark:bg-white/5 p-1 rounded-xl border border-slate-200 dark:border-white/10">
+                                    <button
+                                        onClick={() => setNewCoupon({ ...newCoupon, type: 'percentage', value: 0 })}
+                                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-2 ${newCoupon.type === 'percentage' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
+                                    >
+                                        <Percent size={14} />
+                                        <span>Porcentagem (%)</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setNewCoupon({ ...newCoupon, type: 'fixed', value: 0 })}
+                                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-2 ${newCoupon.type === 'fixed' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
+                                    >
+                                        <DollarIcon size={14} />
+                                        <span>Valor Fixo (R$)</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <InputField
+                                label={newCoupon.type === 'percentage' ? "Valor do Desconto (%)" : "Valor do Desconto (R$)"}
+                                type="number"
+                                value={newCoupon.value.toString()}
+                                onChange={v => setNewCoupon({ ...newCoupon, value: parseFloat(v) || 0 })}
+                                placeholder={newCoupon.type === 'percentage' ? "10" : "50.00"}
+                            />
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <InputField label="Limite de Usos" type="number" value={newCoupon.max_uses} onChange={v => setNewCoupon({ ...newCoupon, max_uses: v })} placeholder="Ex: 100" />
+                                <InputField label="Expira em" type="date" value={newCoupon.end_date} onChange={v => setNewCoupon({ ...newCoupon, end_date: v })} />
+                            </div>
+                        </div>
+                        <div className="p-6 border-t border-slate-100 dark:border-white/5 flex justify-end space-x-3">
+                            <button onClick={() => setShowCouponModal(false)} className="px-5 py-2.5 text-slate-500 hover:text-white font-bold text-sm transition-colors">Cancelar</button>
+                            <button onClick={handleSaveCoupon} disabled={savingCoupon || !newCoupon.code || newCoupon.value <= 0} className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-xl font-bold text-sm flex items-center space-x-2 shadow-lg shadow-blue-900/40 disabled:opacity-50">
+                                {savingCoupon ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={18} />}
+                                <span>{savingCoupon ? 'Salvando...' : 'Criar Cupom'}</span>
                             </button>
                         </div>
                     </div>
@@ -544,3 +572,49 @@ export const MarketingView: React.FC = () => {
         </div>
     );
 };
+
+// --- Sub-components ---
+const StatsCard: React.FC<{ icon: any, label: string, value: string | number, blue?: boolean, green?: boolean, orange?: boolean, blueSecondary?: boolean }> = ({ icon: Icon, label, value, blue, green, orange, blueSecondary }) => (
+    <div className="bg-white dark:bg-[#0A0D14] p-5 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm">
+        <div className="flex items-center space-x-3">
+            <div className={`p-2.5 rounded-xl ${blue ? 'bg-blue-500/10 text-blue-500' : green ? 'bg-emerald-500/10 text-emerald-500' : blueSecondary ? 'bg-indigo-500/10 text-indigo-500' : 'bg-orange-500/10 text-orange-500'}`}>
+                <Icon size={20} />
+            </div>
+            <div>
+                <p className="text-2xl font-black text-slate-900 dark:text-white leading-none">{value}</p>
+                <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mt-1">{label}</p>
+            </div>
+        </div>
+    </div>
+);
+
+const InputField: React.FC<{ label: string, value: string, onChange: (v: string) => void, placeholder?: string, icon?: any, type?: string }> = ({ label, value, onChange, placeholder, icon: Icon, type = 'text' }) => (
+    <div className="space-y-2">
+        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">{label}</label>
+        <div className="relative">
+            {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />}
+            <input
+                type={type}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                className={`w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl py-2.5 px-4 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all ${Icon ? 'pl-10' : ''}`}
+                placeholder={placeholder}
+            />
+        </div>
+    </div>
+);
+
+const LoadingState: React.FC<{ text: string }> = ({ text }) => (
+    <div className="py-20 text-center bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5">
+        <Loader2 size={32} className="text-blue-500 animate-spin mx-auto mb-4" />
+        <p className="text-sm font-black text-slate-500 uppercase tracking-widest">{text}</p>
+    </div>
+);
+
+const EmptyState: React.FC<{ icon: any, title: string, description: string }> = ({ icon: Icon, title, description }) => (
+    <div className="py-20 text-center bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5">
+        <div className="p-4 bg-blue-500/10 rounded-full w-fit mx-auto mb-4"><Icon size={32} className="text-blue-500" /></div>
+        <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">{title}</h3>
+        <p className="text-sm text-slate-500 mb-6">{description}</p>
+    </div>
+);
