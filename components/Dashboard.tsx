@@ -142,7 +142,7 @@ export const Dashboard: React.FC = () => {
       const suspendedCompanies = processedCompanies.filter(c => c.status === 'Suspenso').length;
 
       const currentMonthPaid = invoices
-        .filter(inv => inv.status === 'Pago')
+        .filter(inv => inv.status === 'paid')
         .reduce((acc, inv) => acc + (inv.amount || 0), 0);
 
       const mktSpend = expenses
@@ -174,7 +174,7 @@ export const Dashboard: React.FC = () => {
         const date = inv.date ? new Date(inv.date) : new Date();
         const monthName = months[date.getMonth()];
         if (!acc[monthName]) acc[monthName] = 0;
-        if (inv.status === 'Pago') acc[monthName] += (inv.amount || 0);
+        if (inv.status === 'paid') acc[monthName] += (inv.amount || 0);
         return acc;
       }, {});
 
@@ -228,8 +228,8 @@ export const Dashboard: React.FC = () => {
       // Se estiver vazio (nenhum plano encontrado), manter a lista de planos com 0
       if (formattedPlans.length === 0) {
         formattedPlans = [
-          { plan: 'Starter', count: 0, color: '#94A3B8' },
-          { plan: 'Pro', count: 0, color: '#3B82F6' }
+          { plan: 'Starter', originalName: 'Plano Starter', count: 0, color: '#94A3B8' },
+          { plan: 'Pro', originalName: 'Plano Pro', count: 0, color: '#3B82F6' }
         ];
       }
 

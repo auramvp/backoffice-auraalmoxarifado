@@ -100,13 +100,21 @@ export const SubscriptionsView: React.FC = () => {
   const handleSyncPlans = async () => {
     try {
       notify("Sincronizando clientes e pagamentos com Asaas...");
-      // Chama a API do Asaas para sincronizar clientes
+
+      // 1. Sincronizar Clientes
       await fetch('https://zdgapmcalocdvdgvbwsj.supabase.co/functions/v1/asaas-api?action=sync_customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
 
-      notify("Sincronização iniciada! Os dados serão atualizados em breve.");
+      // 2. Sincronizar Financeiro
+      await fetch('https://zdgapmcalocdvdgvbwsj.supabase.co/functions/v1/asaas-api?action=sync_financials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      notify("Sincronização concluída com sucesso!");
+      fetchSubscribers();
       fetchPlans();
     } catch (e) {
       console.error("Erro ao sincronizar", e);

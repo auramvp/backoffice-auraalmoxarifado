@@ -138,9 +138,9 @@ export const FinanceView: React.FC = () => {
       setExpenses(combinedExpenses);
       setCategories(combinedCats);
 
-      const revenue = invData.filter(i => i.status === 'Pago').reduce((acc, i) => acc + (i.amount || 0), 0);
-      const pending = invData.filter(i => i.status === 'Pendente').reduce((acc, i) => acc + (i.amount || 0), 0);
-      const overdue = invData.filter(i => i.status === 'Atrasado').reduce((acc, i) => acc + (i.amount || 0), 0);
+      const revenue = invData.filter(i => i.status === 'paid').reduce((acc, i) => acc + (i.amount || 0), 0);
+      const pending = invData.filter(i => i.status === 'open').reduce((acc, i) => acc + (i.amount || 0), 0);
+      const overdue = invData.filter(i => i.status === 'overdue').reduce((acc, i) => acc + (i.amount || 0), 0);
 
       const totalExp = combinedExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
       const cloud = combinedExpenses.filter(e => e.category?.toLowerCase() === 'infraestrutura' || e.category?.toLowerCase() === 'saas').reduce((acc, e) => acc + (e.amount || 0), 0);

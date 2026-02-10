@@ -79,30 +79,42 @@ serve(async (req) => {
         }
 
         // --- NOVO: Criar Registro Financeiro (Invoice) ---
-        if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
-            // Verificar se a fatura já existe para evitar duplicidade (pelo ID do pagamento Asaas se armazenado, ou criar um ID único baseado nele)
-            // Como a tabela invoices atual parece não ter asaas_payment_id, vamos inserir um novo registro.
-            // Idealmente, deveríamos ter uma coluna `external_id` na tabela invoices para evitar duplicatas.
-            // Por enquanto, vamos assumir que o webhook não envia duplicatas frequentes ou aceitar o risco menor.
+        if (['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED', 'PAYMENT_CREATED', 'PAYMENT_UPDATED', 'PAYMENT_OVERDUE'].includes(event)) {
 
-            const { error: invoiceError } = await supabase
+            let status = 'open'
+            if (['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'].includes(event)) status = 'paid'
+
+            // Check if already exists to update status
+            const { data: existing } = await supabase
                 .from('invoices')
-                .insert({
-                    company_id: company.id,
-                    amount: payment.value,
-                    status: 'Pago', // Matching Frontend expectation
-                    billing_date: payment.paymentDate || new Date().toISOString(),
-                    due_date: payment.originalDueDate || payment.dueDate,
-                    payment_method: payment.billingType === 'PIX' ? 'pix' : payment.billingType === 'BOLETO' ? 'boleto' : 'credit_card',
-                    description: payment.description || 'Assinatura Aura',
-                    plan_name: 'Plano Aura' // Default or derive from subscription if possible
-                })
+                .select('id')
+                .eq('company_id', company.id)
+                .eq('due_date', payment.dueDate)
+                .eq('amount', payment.value)
+                .limit(1)
 
-            if (invoiceError) {
-                console.error('Erro ao criar fatura:', invoiceError)
-                // Não falhar o webhook por isso, mas logar
+            if (existing && existing.length > 0) {
+                await supabase.from('invoices').update({ status: status }).eq('id', existing[0].id)
+                console.log(`Fatura atualizada para ${status}:`, company.name)
             } else {
-                console.log('Fatura criada com sucesso para a empresa:', company.name)
+                const { error: invoiceError } = await supabase
+                    .from('invoices')
+                    .insert({
+                        company_id: company.id,
+                        amount: payment.value,
+                        status: status,
+                        billing_date: payment.paymentDate || new Date().toISOString(),
+                        due_date: payment.originalDueDate || payment.dueDate,
+                        payment_method: payment.billingType === 'PIX' ? 'pix' : payment.billingType === 'BOLETO' ? 'boleto' : 'credit_card',
+                        description: payment.description || 'Assinatura Aura',
+                        plan_name: 'Plano Aura'
+                    })
+
+                if (invoiceError) {
+                    console.error('Erro ao criar fatura:', invoiceError)
+                } else {
+                    console.log('Fatura criada com sucesso para a empresa:', company.name)
+                }
             }
         }
 

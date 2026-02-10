@@ -23,23 +23,21 @@ serve(async (req) => {
         const action = url.searchParams.get('action')
 
         if (action === 'sync_customers') {
-            // 1. Buscar empresas sem ID do Asaas
             const { data: companies, error } = await supabase
                 .from('companies')
                 .select('*')
                 .is('asaas_customer_id', null)
-                .limit(10) // Processar em lotes para evitar timeouts
+                .limit(20)
 
             if (error) throw error
 
             const results = []
 
             for (const company of companies) {
-                // Criar cliente no Asaas
                 const customerData = {
                     name: company.name,
                     cpfCnpj: company.cnpj.replace(/\D/g, ''),
-                    email: company.email || 'financeiro@' + company.name.toLowerCase().replace(/\s/g, '') + '.com.br', // Fallback
+                    email: company.email || `financeiro@${company.name.toLowerCase().replace(/\s/g, '')}.com.br`,
                     externalReference: company.id
                 }
 
@@ -54,7 +52,6 @@ serve(async (req) => {
 
                 if (response.ok) {
                     const data = await response.json()
-                    // Atualizar base local
                     await supabase
                         .from('companies')
                         .update({ asaas_customer_id: data.id })
@@ -62,53 +59,91 @@ serve(async (req) => {
 
                     results.push({ company: company.name, status: 'created', asaas_id: data.id })
                 } else {
-                    // Se der erro de duplicidade, tentamos buscar pelo CPF/CNPJ
                     const errorText = await response.text()
-                    if (errorText.includes('DELETED_CUSTOMER') || errorText.includes('many customers')) {
-                        // Lógica de recuperação ou log de erro
-                        results.push({ company: company.name, status: 'error', details: errorText })
-                    } else {
-                        // Tentar buscar cliente existente
-                        const searchRes = await fetch(`${asaasApiUrl}/customers?cpfCnpj=${customerData.cpfCnpj}`, {
-                            method: 'GET',
-                            headers: { 'access_token': asaasApiKey }
-                        })
+                    const searchRes = await fetch(`${asaasApiUrl}/customers?cpfCnpj=${customerData.cpfCnpj}`, {
+                        method: 'GET',
+                        headers: { 'access_token': asaasApiKey }
+                    })
 
-                        if (searchRes.ok) {
-                            const searchData = await searchRes.json()
-                            if (searchData.data && searchData.data.length > 0) {
-                                const existingCustomer = searchData.data[0]
-                                await supabase
-                                    .from('companies')
-                                    .update({ asaas_customer_id: existingCustomer.id })
-                                    .eq('id', company.id)
-                                results.push({ company: company.name, status: 'linked_existing', asaas_id: existingCustomer.id })
-                            } else {
-                                results.push({ company: company.name, status: 'error', details: errorText })
-                            }
+                    if (searchRes.ok) {
+                        const searchData = await searchRes.json()
+                        if (searchData.data && searchData.data.length > 0) {
+                            const existingCustomer = searchData.data[0]
+                            await supabase
+                                .from('companies')
+                                .update({ asaas_customer_id: existingCustomer.id })
+                                .eq('id', company.id)
+                            results.push({ company: company.name, status: 'linked_existing', asaas_id: existingCustomer.id })
                         } else {
                             results.push({ company: company.name, status: 'error', details: errorText })
                         }
+                    } else {
+                        results.push({ company: company.name, status: 'error', details: errorText })
                     }
                 }
             }
 
-            return new Response(JSON.stringify({ message: 'Sync concluído', results }), {
+            return new Response(JSON.stringify({ message: 'Sync de clientes concluído', results }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
         }
 
-        if (action === 'get_payment_info') {
-            const { customer_id } = await req.json()
+        if (action === 'sync_financials') {
+            const { data: companies, error } = await supabase
+                .from('companies')
+                .select('id, asaas_customer_id, name')
+                .not('asaas_customer_id', 'is', null)
 
-            // Buscar assinatura ou cobranças no Asaas
-            const response = await fetch(`${asaasApiUrl}/payments?customer=${customer_id}&status=PENDING,OVERDUE`, {
-                headers: { 'access_token': asaasApiKey }
-            })
+            if (error) throw error
 
-            const data = await response.json()
+            const results = []
 
-            return new Response(JSON.stringify(data), {
+            for (const company of companies) {
+                const response = await fetch(`${asaasApiUrl}/payments?customer=${company.asaas_customer_id}&limit=50`, {
+                    headers: { 'access_token': asaasApiKey }
+                })
+
+                if (response.ok) {
+                    const data = await response.json()
+                    const payments = data.data || []
+                    let count = 0
+
+                    for (const payment of payments) {
+                        let status = 'open'
+                        if (['CONFIRMED', 'RECEIVED'].includes(payment.status)) status = 'paid'
+
+                        // Simple de-duplication
+                        const { data: existing } = await supabase
+                            .from('invoices')
+                            .select('id')
+                            .eq('company_id', company.id)
+                            .eq('amount', payment.value)
+                            .eq('due_date', payment.dueDate)
+                            .limit(1)
+
+                        if (!existing || existing.length === 0) {
+                            await supabase.from('invoices').insert({
+                                company_id: company.id,
+                                amount: payment.value,
+                                status: status,
+                                billing_date: payment.paymentDate || payment.clientPaymentDate || new Date().toISOString(),
+                                due_date: payment.dueDate,
+                                payment_method: payment.billingType === 'PIX' ? 'pix' : payment.billingType === 'BOLETO' ? 'boleto' : 'credit_card',
+                                description: payment.description || 'Assinatura Aura',
+                                plan_name: 'Plano Aura'
+                            })
+                            count++
+                        } else {
+                            await supabase.from('invoices').update({ status: status }).eq('id', existing[0].id)
+                        }
+                    }
+                    results.push({ company: company.name, synced: count })
+                } else {
+                    results.push({ company: company.name, error: 'Failed to fetch payments' })
+                }
+            }
+
+            return new Response(JSON.stringify({ message: 'Sync financeiro concluído', results }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
         }
