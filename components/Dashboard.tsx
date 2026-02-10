@@ -38,8 +38,10 @@ import { supabase } from '../lib/supabase';
 
 export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
+  const [predictionRange, setPredictionRange] = useState<7 | 14 | 21 | 30>(7);
   const [metrics, setMetrics] = useState({
     totalMRR: 0,
+    predictedRevenue: 0,
     totalCompanies: 0,
     activeSubs: 0,
     churnRate: 0,
@@ -55,7 +57,7 @@ export const Dashboard: React.FC = () => {
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, [predictionRange]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -159,6 +161,19 @@ export const Dashboard: React.FC = () => {
         .filter((e: any) => e.is_cac === true)
         .reduce((acc: number, e: any) => acc + (Number(e.amount) || 0), 0);
 
+      // Calcular Previsão de Receita (Faturas 'open' nos próximos X dias)
+      const rangeDate = new Date();
+      rangeDate.setDate(now.getDate() + predictionRange);
+
+      const predictedRevenue = invoices
+        .filter(inv => {
+          if (inv.status !== 'open') return false;
+          const dateStr = inv.due_date || inv.billing_date || inv.date;
+          const invDate = dateStr ? new Date(dateStr) : null;
+          return invDate && invDate >= now && invDate <= rangeDate;
+        })
+        .reduce((acc, inv) => acc + (Number(inv.amount) || 0), 0);
+
       const totalExpenses = expenses.reduce((acc: number, e: any) => acc + (Number(e.amount) || 0), 0);
       const profit = currentMonthPaid - totalExpenses;
 
@@ -169,6 +184,7 @@ export const Dashboard: React.FC = () => {
 
       setMetrics({
         totalMRR: currentMonthPaid,
+        predictedRevenue: predictedRevenue,
         totalCompanies: totalCompanies,
         activeSubs: activeCompanies,
         churnRate: parseFloat(churn.toFixed(1)),
@@ -288,7 +304,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
         <StatCard
           title="MRR Real"
           value={`R$ ${metrics.totalMRR.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
@@ -297,6 +313,26 @@ export const Dashboard: React.FC = () => {
           trend={metrics.totalMRR > 0 ? "up" : undefined}
           variant="blue"
         />
+        <div className="relative group/predict col-span-1">
+          <StatCard
+            title="MRR Previsto"
+            value={`R$ ${metrics.predictedRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+            subValue={`Próximos ${predictionRange} dias`}
+            icon={Clock}
+            variant="blue"
+          />
+          <div className="absolute top-2 right-2 flex bg-white/10 backdrop-blur-md p-0.5 rounded-lg border border-white/10 opacity-0 group-hover/predict:opacity-100 transition-opacity">
+            {[7, 14, 21, 30].map((days) => (
+              <button
+                key={days}
+                onClick={() => setPredictionRange(days as any)}
+                className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter transition-all ${predictionRange === days ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+              >
+                {days}d
+              </button>
+            ))}
+          </div>
+        </div>
         <StatCard
           title="Total Empresas"
           value={metrics.totalCompanies.toString()}
