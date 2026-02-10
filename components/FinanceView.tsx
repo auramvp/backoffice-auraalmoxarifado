@@ -73,6 +73,7 @@ interface Category {
 export const FinanceView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<FinanceTab>('receita');
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -176,6 +177,31 @@ export const FinanceView: React.FC = () => {
     }
   };
 
+  const handleSyncFinancials = async () => {
+    try {
+      setSyncing(true);
+      // 1. Sync Customers
+      await fetch('https://zdgapmcalocdvdgvbwsj.supabase.co/functions/v1/asaas-api?action=sync_customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      // 2. Sync Financials
+      await fetch('https://zdgapmcalocdvdgvbwsj.supabase.co/functions/v1/asaas-api?action=sync_financials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      await fetchFinanceData();
+      await createAuditLog('Sincronização Asaas', 'Sincronização manual de clientes e faturas realizada através do Financeiro.', 'success');
+    } catch (err) {
+      console.error("Erro ao sincronizar com Asaas:", err);
+      alert("Erro ao sincronizar com Asaas. Tente novamente.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const fetchUserProfile = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -267,6 +293,14 @@ export const FinanceView: React.FC = () => {
           <p className="text-slate-500 dark:text-gray-400 font-medium tracking-tight uppercase tracking-widest text-[9px]">Análise de custos e segmentação de investimentos AURA.</p>
         </div>
         <div className="flex items-center space-x-3">
+          <button
+            onClick={handleSyncFinancials}
+            disabled={syncing}
+            className="px-4 py-2 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-slate-700 dark:text-white hover:bg-slate-200 dark:hover:bg-white/10 transition-all flex items-center space-x-2 shadow-sm text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+          >
+            {syncing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
+            <span>{syncing ? 'Sincronizando...' : 'Sincronizar Asaas'}</span>
+          </button>
           <button
             onClick={fetchFinanceData}
             className="p-2 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-blue-500 hover:bg-blue-600/10 transition-all flex items-center shadow-sm"
