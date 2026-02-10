@@ -34,8 +34,8 @@ import {
   ChevronDown,
   Sparkles,
   Archive,
-  // Fix: Add missing Package icon import
-  Package
+  Package,
+  XCircle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -46,6 +46,7 @@ interface Invoice {
   company_id: string;
   amount: number;
   billing_date: string;
+  due_date?: string;
   status: string;
   companies?: { name: string };
 }
@@ -299,46 +300,100 @@ const TabButton: React.FC<{ active: boolean, onClick: () => void, label: string 
   </button>
 );
 
-const ReceitaSection: React.FC<{ metrics: any, invoices: Invoice[] }> = ({ metrics, invoices }) => (
-  <div className="space-y-4 animate-in slide-in-from-right-4 duration-500">
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <StatBox title="Receita Total" value={`R$ ${metrics.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} trend="+12%" positive />
-      <StatBox title="A Receber" value={`R$ ${metrics.pendingRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} sub="Faturas pendentes" />
-      <StatBox title="Atrasado" value={`R$ ${metrics.overdueRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} sub="Risco de Churn" warning />
-    </div>
+const ReceitaSection: React.FC<{ metrics: any, invoices: Invoice[] }> = ({ metrics, invoices }) => {
+  const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'open' | 'overdue' | 'canceled'>('all');
 
-    <div className="bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5 shadow-2xl overflow-hidden">
-      <div className="p-4 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
-        <h3 className="font-black text-sm text-slate-900 dark:text-white uppercase tracking-tight italic leading-none">Fluxo de Faturamento Real</h3>
-        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-white/5 px-2 py-1 rounded-lg">Fonte: Table 'invoices'</span>
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter(inv => {
+      const isOverdue = inv.status === 'open' && inv.due_date && new Date(inv.due_date) < new Date();
+      const status = isOverdue ? 'overdue' : inv.status;
+
+      if (statusFilter === 'all') return true;
+      if (statusFilter === 'canceled') return ['void', 'uncollectible', 'canceled'].includes(status);
+      return status === statusFilter;
+    });
+  }, [invoices, statusFilter]);
+
+  return (
+    <div className="space-y-4 animate-in slide-in-from-right-4 duration-500">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatBox title="Receita Total" value={`R$ ${metrics.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} trend="+12%" positive />
+        <StatBox title="A Receber" value={`R$ ${metrics.pendingRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} sub="Faturas pendentes" />
+        <StatBox title="Atrasado" value={`R$ ${metrics.overdueRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} sub="Risco de Churn" warning />
       </div>
-      <div className="p-2 space-y-1">
-        {invoices.length > 0 ? invoices.map((inv) => (
-          <div key={inv.id} className="flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-white/[0.02] rounded-2xl transition-all group border border-transparent hover:border-slate-200 dark:hover:border-white/5">
-            <div className="flex items-center space-x-4">
-              <div className="w-10 h-10 bg-blue-600/10 rounded-xl flex items-center justify-center text-blue-500">
-                <FileText size={18} />
-              </div>
-              <div>
-                <h5 className="font-black text-slate-900 dark:text-white text-sm">{inv.companies?.name || 'Empresa Aura'}</h5>
-                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">#{inv.id.substring(0, 8)} • {inv.billing_date ? new Date(inv.billing_date).toLocaleDateString('pt-BR') : 'N/A'}</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="font-black text-slate-900 dark:text-white text-base leading-none mb-1">R$ {inv.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-              <StatusBadge status={inv.status} />
+
+      <div className="bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5 shadow-2xl overflow-hidden">
+        <div className="p-4 border-b border-slate-100 dark:border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center space-x-3">
+            <h3 className="font-black text-sm text-slate-900 dark:text-white uppercase tracking-tight italic leading-none">Fluxo de Faturamento Real</h3>
+            <div className="flex bg-slate-100 dark:bg-white/5 p-1 rounded-xl border border-slate-200 dark:border-white/5">
+              <button
+                onClick={() => setStatusFilter('all')}
+                className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${statusFilter === 'all' ? 'bg-white dark:bg-white/10 text-blue-600 dark:text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                Todos
+              </button>
+              <button
+                onClick={() => setStatusFilter('open')}
+                className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${statusFilter === 'open' ? 'bg-white dark:bg-yellow-500/20 text-yellow-600 dark:text-yellow-500 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                Pendentes
+              </button>
+              <button
+                onClick={() => setStatusFilter('paid')}
+                className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${statusFilter === 'paid' ? 'bg-white dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-500 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                Confirmados
+              </button>
+              <button
+                onClick={() => setStatusFilter('overdue')}
+                className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${statusFilter === 'overdue' ? 'bg-white dark:bg-red-500/20 text-red-600 dark:text-red-500 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                Atrasados
+              </button>
+              <button
+                onClick={() => setStatusFilter('canceled')}
+                className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${statusFilter === 'canceled' ? 'bg-white dark:bg-slate-500/20 text-slate-600 dark:text-slate-400 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                Cancelados
+              </button>
             </div>
           </div>
-        )) : (
-          <div className="py-20 text-center opacity-50">
-            <FileText size={48} className="mx-auto mb-4 text-slate-600" />
-            <p className="text-xs font-black uppercase tracking-widest">Aguardando dados da nuvem...</p>
-          </div>
-        )}
+          <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-white/5 px-2 py-1 rounded-lg">Fonte: Table 'invoices'</span>
+        </div>
+        <div className="p-2 space-y-1">
+          {filteredInvoices.length > 0 ? filteredInvoices.map((inv) => {
+            const isOverdue = inv.status === 'open' && inv.due_date && new Date(inv.due_date) < new Date();
+            const currentStatus = isOverdue ? 'overdue' : inv.status;
+
+            return (
+              <div key={inv.id} className="flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-white/[0.02] rounded-2xl transition-all group border border-transparent hover:border-slate-200 dark:hover:border-white/5">
+                <div className="flex items-center space-x-4">
+                  <div className="w-10 h-10 bg-blue-600/10 rounded-xl flex items-center justify-center text-blue-500">
+                    <FileText size={18} />
+                  </div>
+                  <div>
+                    <h5 className="font-black text-slate-900 dark:text-white text-sm">{inv.companies?.name || 'Empresa Aura'}</h5>
+                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">#{inv.id.substring(0, 8)} • {inv.billing_date ? new Date(inv.billing_date).toLocaleDateString('pt-BR') : 'N/A'}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-black text-slate-900 dark:text-white text-base leading-none mb-1">R$ {inv.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                  <StatusBadge status={currentStatus} />
+                </div>
+              </div>
+            );
+          }) : (
+            <div className="py-20 text-center opacity-50">
+              <FileText size={48} className="mx-auto mb-4 text-slate-600" />
+              <p className="text-xs font-black uppercase tracking-widest">Nenhuma fatura encontrada nesta categoria.</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const DespesasSection: React.FC<{ metrics: any, expenses: Expense[], categories: Category[], setCategories: any, onRefresh: () => void, onLog: (a: string, d: string, t: any) => void }> = ({ metrics, expenses, categories, setCategories, onRefresh, onLog }) => {
   const [showModal, setShowModal] = useState(false);
@@ -354,7 +409,7 @@ const DespesasSection: React.FC<{ metrics: any, expenses: Expense[], categories:
     billing_day: '10',
     date: new Date().toISOString().split('T')[0],
     category: '',
-    status: 'Pago',
+    status: 'paid',
     is_cac: false
   });
 
@@ -906,15 +961,21 @@ const StatBox: React.FC<{ title: string, value: string, sub?: string, trend?: st
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const configs: any = {
-    'Pago': { color: 'text-emerald-500', bg: 'bg-emerald-500/10', icon: CheckCircle2 },
-    'Pendente': { color: 'text-yellow-500', bg: 'bg-yellow-500/10', icon: Clock },
-    'Atrasado': { color: 'text-red-500', bg: 'bg-red-500/10', icon: AlertTriangle }
+    'paid': { label: 'Confirmado', color: 'text-emerald-500', bg: 'bg-emerald-500/10', icon: CheckCircle2 },
+    'open': { label: 'Pendente', color: 'text-yellow-500', bg: 'bg-yellow-500/10', icon: Clock },
+    'overdue': { label: 'Atrasado', color: 'text-red-500', bg: 'bg-red-500/10', icon: AlertTriangle },
+    'canceled': { label: 'Cancelado', color: 'text-slate-500', bg: 'bg-slate-500/10', icon: XCircle },
+    'void': { label: 'Cancelado', color: 'text-slate-500', bg: 'bg-slate-500/10', icon: XCircle },
+    'uncollectible': { label: 'Cancelado', color: 'text-slate-500', bg: 'bg-slate-500/10', icon: XCircle },
+    // Fallbacks para labels antigos se existirem
+    'Pago': { label: 'Confirmado', color: 'text-emerald-500', bg: 'bg-emerald-500/10', icon: CheckCircle2 },
+    'Pendente': { label: 'Pendente', color: 'text-yellow-500', bg: 'bg-yellow-500/10', icon: Clock }
   };
-  const config = configs[status] || configs['Pendente'];
+  const config = configs[status] || { label: status, color: 'text-slate-400', bg: 'bg-slate-400/10', icon: Clock };
   return (
     <div className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full ${config.bg} ${config.color}`}>
       <config.icon size={11} strokeWidth={3} />
-      <span className="text-[9px] font-black uppercase tracking-widest leading-none">{status}</span>
+      <span className="text-[9px] font-black uppercase tracking-widest leading-none">{config.label}</span>
     </div>
   );
 };
