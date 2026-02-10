@@ -537,7 +537,7 @@ export const MarketingView: React.FC = () => {
             {/* Coupon Modal */}
             {showCouponModal && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#05070A]/80 backdrop-blur-sm animate-in fade-in duration-300">
-                    <div className="bg-white dark:bg-[#0F172A] w-full max-w-md rounded-[2rem] border border-slate-200 dark:border-white/5 shadow-2xl animate-in zoom-in-95 duration-300 overflow-hidden">
+                    <div className="bg-white dark:bg-[#0F172A] w-full max-w-lg rounded-[2rem] border border-slate-200 dark:border-white/5 shadow-2xl animate-in zoom-in-95 duration-300 overflow-hidden">
                         <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
                             <div className="flex items-center space-x-3 text-blue-500">
                                 <div className="p-2 bg-blue-600/10 rounded-xl"><Ticket size={20} /></div>
@@ -548,7 +548,7 @@ export const MarketingView: React.FC = () => {
                             </div>
                             <button onClick={() => setShowCouponModal(false)} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><X size={20} /></button>
                         </div>
-                        <div className="p-6 space-y-5">
+                        <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
                             <InputField label="Código do Cupom" value={newCoupon.code} onChange={v => setNewCoupon({ ...newCoupon, code: v.toUpperCase() })} placeholder="EX: AURA10" />
 
                             <div className="space-y-2">
