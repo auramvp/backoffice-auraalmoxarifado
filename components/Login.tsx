@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, Mail, Sparkles, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Loader2, Mail, Sparkles, CheckCircle2, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Turnstile } from '@marsidev/react-turnstile';
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -12,6 +13,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [linkSent, setLinkSent] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,6 +25,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         email,
         options: {
           emailRedirectTo: 'https://admin.auraalmoxarifado.com.br',
+          captchaToken: captchaToken || undefined,
         },
       });
 
@@ -86,6 +89,19 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                     placeholder="seu@email.com"
                   />
                 </div>
+              </div>
+
+              <div className="flex justify-center py-2">
+                <Turnstile
+                  siteKey={import.meta.env.VITE_CLOUDFLARE_TURNSTILE_SITE_KEY || '0x4AAAAAACaSmlBs51Op_RRa'}
+                  onSuccess={(token) => setCaptchaToken(token)}
+                  onError={() => setError('Erro ao carregar verificação de segurança.')}
+                  onExpire={() => setCaptchaToken(null)}
+                  options={{
+                    theme: 'auto',
+                    size: 'normal',
+                  }}
+                />
               </div>
             </div>
 
