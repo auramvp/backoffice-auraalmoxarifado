@@ -360,7 +360,7 @@ export const PlansView: React.FC = () => {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                     <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">Planos</h2>
-                    <p className="text-slate-500 dark:text-gray-400 font-medium">Personalize os limites e módulos de cada assinatura Cakto.</p>
+                    <p className="text-slate-500 dark:text-gray-400 font-medium">Personalize os limites e módulos de cada assinatura Aura.</p>
                 </div>
                 <div className="flex items-center space-x-3">
                     <button
@@ -399,7 +399,7 @@ export const PlansView: React.FC = () => {
                         return (
                             <div
                                 key={plan.id}
-                                className="bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5 p-6 hover:border-blue-500/30 transition-all group"
+                                className="bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5 p-4 hover:border-blue-500/30 transition-all group shadow-lg"
                             >
                                 {/* Plan Header */}
                                 <div className="flex items-start justify-between mb-4">
@@ -407,7 +407,7 @@ export const PlansView: React.FC = () => {
                                         ? 'bg-gradient-to-br from-amber-500 to-orange-600 shadow-orange-900/30'
                                         : 'bg-gradient-to-br from-blue-600 to-indigo-600 shadow-blue-900/30'
                                         }`}>
-                                        <Zap size={20} />
+                                        <Zap size={18} />
                                     </div>
                                     <div className="flex flex-col items-end space-y-1">
                                         {plan.external_id === 'partners-exclusive' && (
@@ -425,13 +425,13 @@ export const PlansView: React.FC = () => {
                                 </div>
 
                                 {/* Plan Info */}
-                                <h3 className="text-lg font-black text-slate-900 dark:text-white mb-1">{plan.name}</h3>
-                                <p className={`text-2xl font-black mb-2 ${plan.external_id === 'partners-exclusive'
+                                <h3 className="text-base font-black text-slate-900 dark:text-white mb-1">{plan.name}</h3>
+                                <p className={`text-xl font-black mb-1 ${plan.external_id === 'partners-exclusive'
                                     ? 'text-amber-500'
                                     : 'text-blue-600 dark:text-blue-400'
                                     }`}>
                                     {plan.value === 0 ? 'Grátis' : `R$ ${plan.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-                                    {plan.value > 0 && <span className="text-xs text-slate-500 font-medium">/mês</span>}
+                                    {plan.value > 0 && <span className="text-[10px] text-slate-500 font-medium">/mês</span>}
                                 </p>
 
                                 {/* Cakto ID */}
@@ -499,16 +499,6 @@ export const PlansView: React.FC = () => {
                 </div>
             )}
 
-            {/* Info Footer */}
-            <div className="bg-slate-100 dark:bg-[#111827] rounded-3xl p-6 border border-slate-200 dark:border-white/5 flex flex-col md:flex-row items-center gap-6">
-                <div className="p-3 bg-blue-600/10 rounded-2xl text-blue-500">
-                    <Layers size={24} />
-                </div>
-                <div className="flex-1 text-center md:text-left">
-                    <h4 className="font-black text-slate-900 dark:text-white mb-1">Sincronização automática com Cakto</h4>
-                    <p className="text-sm text-slate-500">Os planos são importados automaticamente da plataforma Cakto. Configure os limites para controlar o acesso dos assinantes.</p>
-                </div>
-            </div>
         </div>
     );
 };

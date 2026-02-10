@@ -138,9 +138,9 @@ export const FinanceView: React.FC = () => {
       setExpenses(combinedExpenses);
       setCategories(combinedCats);
 
-      const revenue = invData.filter(i => i.status === 'paid').reduce((acc, i) => acc + (i.amount || 0), 0);
-      const pending = invData.filter(i => i.status === 'open').reduce((acc, i) => acc + (i.amount || 0), 0);
-      const overdue = invData.filter(i => i.status === 'overdue').reduce((acc, i) => acc + (i.amount || 0), 0);
+      const revenue = invData.filter(i => i.status === 'paid').reduce((acc, i) => acc + (Number(i.amount) || 0), 0);
+      const pending = invData.filter(i => i.status === 'open').reduce((acc, i) => acc + (Number(i.amount) || 0), 0);
+      const overdue = invData.filter(i => i.status === 'overdue').reduce((acc, i) => acc + (Number(i.amount) || 0), 0);
 
       const totalExp = combinedExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
       const cloud = combinedExpenses.filter(e => e.category?.toLowerCase() === 'infraestrutura' || e.category?.toLowerCase() === 'saas').reduce((acc, e) => acc + (e.amount || 0), 0);
@@ -321,7 +321,7 @@ const ReceitaSection: React.FC<{ metrics: any, invoices: Invoice[] }> = ({ metri
               </div>
               <div>
                 <h5 className="font-black text-slate-900 dark:text-white text-sm">{inv.companies?.name || 'Empresa Aura'}</h5>
-                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">#{inv.id.substring(0, 8)} • {inv.billing_date}</p>
+                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">#{inv.id.substring(0, 8)} • {inv.billing_date ? new Date(inv.billing_date).toLocaleDateString('pt-BR') : 'N/A'}</p>
               </div>
             </div>
             <div className="text-right">

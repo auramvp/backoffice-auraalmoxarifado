@@ -332,7 +332,7 @@ const CompanyDetails: React.FC<{ company: any, onBack: () => void, onUpdate: (c:
   const handleToggleStatus = async () => {
     setIsUpdatingStatus(true);
     setModalError(null);
-    const newStatus = company.status === 'Ativo' ? 'Suspenso' : 'Ativo';
+    const newStatus = (company.status === 'Ativo' || company.status === 'active') ? 'Suspenso' : 'Ativo';
 
     try {
       // 1. Tentar Atualizar Tabela de Empresas
@@ -509,7 +509,7 @@ const CompanyDetails: React.FC<{ company: any, onBack: () => void, onUpdate: (c:
     }
   };
 
-  const isAtivo = company.status === 'Ativo';
+  const isAtivo = company.status === 'Ativo' || company.status === 'active';
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
@@ -922,11 +922,16 @@ const CompanyDetails: React.FC<{ company: any, onBack: () => void, onUpdate: (c:
   );
 };
 
-const StatusLabel: React.FC<{ status: string }> = ({ status }) => (
-  <div className={`px-4 py-1.5 rounded-full border border-white/5 ${status === 'Ativo' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/10' : 'bg-red-500/10 text-red-500 border-red-500/10'}`}>
-    <span className="text-[10px] font-black uppercase tracking-widest leading-none">{status || 'Ativo'}</span>
-  </div>
-);
+const StatusLabel: React.FC<{ status: string }> = ({ status }) => {
+  const normalizedStatus = status?.toLowerCase() === 'active' || status === 'Ativo' ? 'Ativo' : 'Suspenso';
+  const isAtivo = normalizedStatus === 'Ativo';
+
+  return (
+    <div className={`px-4 py-1.5 rounded-full border border-white/5 ${isAtivo ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/10' : 'bg-red-500/10 text-red-500 border-red-500/10'}`}>
+      <span className="text-[10px] font-black uppercase tracking-widest leading-none">{normalizedStatus}</span>
+    </div>
+  );
+};
 
 const ContactItem: React.FC<{ icon: any, text: string }> = ({ icon: Icon, text }) => (
   <div className="flex items-start space-x-3 text-slate-500 max-w-full">

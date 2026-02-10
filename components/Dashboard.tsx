@@ -141,9 +141,19 @@ export const Dashboard: React.FC = () => {
       const activeCompanies = processedCompanies.filter(c => c.status === 'Ativo').length;
       const suspendedCompanies = processedCompanies.filter(c => c.status === 'Suspenso').length;
 
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+
       const currentMonthPaid = invoices
-        .filter(inv => inv.status === 'paid')
-        .reduce((acc, inv) => acc + (inv.amount || 0), 0);
+        .filter(inv => {
+          const dateStr = inv.billing_date || inv.date || inv.created_at;
+          const invDate = dateStr ? new Date(dateStr) : new Date();
+          return inv.status === 'paid' &&
+            invDate.getMonth() === currentMonth &&
+            invDate.getFullYear() === currentYear;
+        })
+        .reduce((acc, inv) => acc + (Number(inv.amount) || 0), 0);
 
       const mktSpend = expenses
         .filter((e: any) => e.is_cac === true)
@@ -171,10 +181,11 @@ export const Dashboard: React.FC = () => {
 
       const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
       const groupedGrowth = invoices.reduce((acc: any, inv) => {
-        const date = inv.date ? new Date(inv.date) : new Date();
+        const dateStr = inv.billing_date || inv.date || inv.created_at;
+        const date = dateStr ? new Date(dateStr) : new Date();
         const monthName = months[date.getMonth()];
         if (!acc[monthName]) acc[monthName] = 0;
-        if (inv.status === 'paid') acc[monthName] += (inv.amount || 0);
+        if (inv.status === 'paid') acc[monthName] += (Number(inv.amount) || 0);
         return acc;
       }, {});
 
