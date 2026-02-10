@@ -67,7 +67,7 @@ export const Dashboard: React.FC = () => {
         supabase.from('invoices').select('*'),
         supabase.from('expenses').select('*'),
         supabase.from('plans').select('*'),
-        supabase.from('subscriptions').select('payment_method')
+        supabase.from('subscriptions').select('*')
       ]);
 
       if (companiesRes.error) console.warn("Aviso na busca de empresas:", companiesRes.error.message);
@@ -78,7 +78,7 @@ export const Dashboard: React.FC = () => {
 
       const companies = companiesRes.data || [];
       const invoices = invoicesRes.data || [];
-      const subscriptions = subscriptionsRes.data || [];
+      const subscriptionsData = subscriptionsRes.data || [];
       const realPlans = plansRes.data || [];
 
       // Processar dados reais de pagamentos da tabela subscriptions
@@ -86,7 +86,7 @@ export const Dashboard: React.FC = () => {
       const paymentCounts: Record<string, number> = {};
       let totalPayments = 0;
 
-      subscriptions.forEach((sub: any) => {
+      subscriptionsData.forEach((sub: any) => {
         if (sub.payment_method) {
           const method = sub.payment_method;
           paymentCounts[method] = (paymentCounts[method] || 0) + 1;
@@ -161,11 +161,11 @@ export const Dashboard: React.FC = () => {
         .filter((e: any) => e.is_cac === true)
         .reduce((acc: number, e: any) => acc + (Number(e.amount) || 0), 0);
 
-      // Calcular Previsão de Receita (Faturas 'open' nos próximos X dias)
+      // Calcular Previsão de Receita (Faturas 'open' + Assinaturas 'trial' nos próximos X dias)
       const rangeDate = new Date();
       rangeDate.setDate(now.getDate() + predictionRange);
 
-      const predictedRevenue = invoices
+      const predictedFromInvoices = invoices
         .filter(inv => {
           if (inv.status !== 'open') return false;
           const dateStr = inv.due_date || inv.billing_date || inv.date;
@@ -174,8 +174,18 @@ export const Dashboard: React.FC = () => {
         })
         .reduce((acc, inv) => acc + (Number(inv.amount) || 0), 0);
 
+      const predictedFromTrials = subscriptionsData
+        .filter((sub: any) => {
+          if (sub.status !== 'trial') return false;
+          const nextBilling = sub.next_billing ? new Date(sub.next_billing) : null;
+          return nextBilling && nextBilling >= now && nextBilling <= rangeDate;
+        })
+        .reduce((acc: number, sub: any) => acc + (Number(sub.value) || 0), 0);
+
+      const predictedRevenue = predictedFromInvoices + predictedFromTrials;
+
       const totalExpenses = expenses.reduce((acc: number, e: any) => acc + (Number(e.amount) || 0), 0);
-      const profit = currentMonthPaid - totalExpenses;
+      const profit = currentMonthPaid - totalExpenses; // Lucro baseado APENAS no que foi pago (Paid)
 
       const avgTicket = activeCompanies > 0 ? currentMonthPaid / activeCompanies : 0;
       const churn = totalCompanies > 0 ? (suspendedCompanies / totalCompanies) * 100 : 0;
