@@ -19,8 +19,10 @@ export const TeamView: React.FC = () => {
     name: '',
     email: '',
     role: 'Master',
-    permissions: [] as string[]
+    permissions: [] as string[],
+    description: ''
   });
+
 
   useEffect(() => {
     fetchTeam();
@@ -215,6 +217,41 @@ export const TeamView: React.FC = () => {
     }));
   };
 
+  useEffect(() => {
+    if (newMember.description) {
+      updatePermissionsFromDescription(newMember.description);
+    }
+  }, [newMember.description]);
+
+  const updatePermissionsFromDescription = (description: string) => {
+    const text = description.toLowerCase();
+    const selectedPerms: string[] = [];
+
+    const keywordMapping: { [key: string]: string[] } = {
+      [View.DASHBOARD]: ['dashboard', 'visão geral', 'indicadores', 'graficos', 'gráficos', 'resumo'],
+      [View.TEAM]: ['time', 'equipe', 'membros', 'acessos', 'permissoes', 'permissões', 'usuarios backoffice'],
+      [View.LOG]: ['logs', 'atividades', 'historico', 'histórico', 'rastreamento', 'auditoria'],
+      [View.USERS]: ['usuarios', 'usuários', 'clientes', 'contas', 'saas'],
+      [View.COMPANIES]: ['empresas', 'negocios', 'negócios', 'cnpj', 'parceiros'],
+      [View.FINANCE]: ['financeiro', 'pagamentos', 'faturamento', 'dinheiro', 'vendas', 'cobrança', 'asaas'],
+      [View.SUBSCRIPTIONS]: ['assinaturas', 'planos', 'mensalidades', 'ciclos'],
+      [View.TAX_RECOVERY]: ['tributaria', 'tributária', 'impostos', 'recuperação', 'fiscal'],
+      [View.MARKETING]: ['marketing', 'banners', 'cupons', 'campanhas', 'promoções'],
+    };
+
+    Object.entries(keywordMapping).forEach(([perm, keywords]) => {
+      if (keywords.some(kw => text.includes(kw))) {
+        selectedPerms.push(perm);
+      }
+    });
+
+    setNewMember(prev => ({
+      ...prev,
+      permissions: selectedPerms
+    }));
+  };
+
+
   const filteredTeam = team.filter(m => m.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   const permissionOptions = [
@@ -344,10 +381,11 @@ export const TeamView: React.FC = () => {
 
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Nível de Acesso</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-2 mb-4">
                     {['Master', 'Time'].map((role) => (
                       <button
                         key={role}
+                        type="button"
                         onClick={() => setNewMember({ ...newMember, role })}
                         className={`py-2 px-3 rounded-lg text-xs font-bold transition-all border ${newMember.role === role
                           ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/50'
@@ -361,30 +399,45 @@ export const TeamView: React.FC = () => {
                 </div>
 
                 {newMember.role === 'Time' && (
-                  <div className="animate-in slide-in-from-top-4 duration-300">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Permissões de Acesso</label>
-                    <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
-                      {permissionOptions.map((option) => (
-                        <button
-                          key={option.id}
-                          onClick={() => togglePermission(option.id)}
-                          className={`flex items-center space-x-2 p-2 rounded-lg text-xs border transition-all ${newMember.permissions.includes(option.id)
-                            ? 'bg-blue-600/10 border-blue-500/50 text-blue-400'
-                            : 'bg-black/20 border-white/5 text-slate-500 hover:border-white/10'
-                            }`}
-                        >
-                          <div className={`w-4 h-4 rounded border flex items-center justify-center ${newMember.permissions.includes(option.id)
-                            ? 'bg-blue-500 border-blue-500'
-                            : 'border-slate-600'
-                            }`}>
-                            {newMember.permissions.includes(option.id) && <CheckCircle2 size={10} className="text-white" />}
-                          </div>
-                          <span className="font-medium truncate">{option.label}</span>
-                        </button>
-                      ))}
+                  <div className="animate-in slide-in-from-top-2 duration-300 space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">O que essa pessoa fará? (IA)</label>
+                      <textarea
+                        value={newMember.description}
+                        onChange={(e) => setNewMember({ ...newMember, description: e.target.value })}
+                        className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-sm text-white placeholder-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all outline-none font-medium min-h-[60px] resize-none"
+                        placeholder="Ex: Cuida do financeiro e vê os logs..."
+                      />
+                      <p className="text-[9px] text-slate-500 mt-1 italic">A IA marcará as permissões abaixo automaticamente.</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Permissões de Acesso</label>
+                      <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
+                        {permissionOptions.map((option) => (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => togglePermission(option.id)}
+                            className={`flex items-center space-x-2 p-2 rounded-lg text-xs border transition-all ${newMember.permissions.includes(option.id)
+                              ? 'bg-blue-600/10 border-blue-500/50 text-blue-400'
+                              : 'bg-black/20 border-white/5 text-slate-500 hover:border-white/10'
+                              }`}
+                          >
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${newMember.permissions.includes(option.id)
+                              ? 'bg-blue-500 border-blue-500'
+                              : 'border-slate-600'
+                              }`}>
+                              {newMember.permissions.includes(option.id) && <CheckCircle2 size={10} className="text-white" />}
+                            </div>
+                            <span className="font-medium truncate">{option.label}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
+
 
               </div>
 

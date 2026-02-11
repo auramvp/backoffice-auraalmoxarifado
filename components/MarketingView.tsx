@@ -4,7 +4,8 @@ import {
     Megaphone, Plus, Image, Link2, Clock, Eye, MousePointerClick, Trash2,
     RefreshCcw, X, Upload, Calendar, ExternalLink, BarChart3, TrendingUp,
     CheckCircle2, AlertTriangle, Loader2, Ticket, Percent, DollarSign as DollarIcon,
-    ChevronRight, ArrowRight, Tag, ArrowRightLeft
+    ChevronRight, ArrowRight, Tag, ArrowRightLeft, Edit3, Save
+
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -72,6 +73,8 @@ export const MarketingView: React.FC = () => {
         end_date: '',
         is_active: true
     });
+    const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
+
 
     useEffect(() => {
         fetchData();
@@ -226,6 +229,19 @@ export const MarketingView: React.FC = () => {
     };
 
     // --- Coupon Actions ---
+    const logAction = async (action: string, details: string) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        await supabase.from('activity_logs').insert([{
+            user_name: user?.user_metadata?.name || 'Admin',
+            user_role: user?.user_metadata?.role || 'ADMIN',
+            action,
+            details,
+            module: 'MARKETING',
+            type: 'success',
+            timestamp: new Date().toISOString()
+        }]);
+    };
+
     const handleSaveCoupon = async () => {
         if (!newCoupon.code || newCoupon.value <= 0) {
             alert('Preencha o código e o valor do desconto');
@@ -238,26 +254,60 @@ export const MarketingView: React.FC = () => {
         }
 
         setSavingCoupon(true);
-        const { data, error } = await supabase
-            .from('coupons')
-            .insert([{
+        try {
+            const couponData = {
                 code: newCoupon.code.toUpperCase().replace(/\s/g, ''),
                 type: newCoupon.type,
                 value: newCoupon.value,
                 max_uses: newCoupon.max_uses ? parseInt(newCoupon.max_uses) : null,
                 end_date: newCoupon.end_date || null,
                 is_active: newCoupon.is_active
-            }])
-            .select();
+            };
 
-        if (!error && data) {
-            setCoupons([data[0] as Coupon, ...coupons]);
+            let error;
+            if (editingCouponId) {
+                const { error: updateError } = await supabase
+                    .from('coupons')
+                    .update(couponData)
+                    .eq('id', editingCouponId);
+                error = updateError;
+            } else {
+                const { error: insertError } = await supabase
+                    .from('coupons')
+                    .insert([couponData]);
+                error = insertError;
+            }
+
+            if (error) throw error;
+
+            await logAction(
+                editingCouponId ? 'Cupom Atualizado' : 'Novo Cupom Criado',
+                `O cupom ${newCoupon.code} foi ${editingCouponId ? 'atualizado' : 'criado'} com sucesso.`
+            );
+
             setShowCouponModal(false);
+            setEditingCouponId(null);
             resetCouponForm();
-        } else {
-            alert('Erro ao salvar cupom: ' + error?.message);
+            fetchCoupons();
+        } catch (error: any) {
+            console.error('Erro ao salvar cupom:', error);
+            alert('Erro ao salvar cupom: ' + error.message);
+        } finally {
+            setSavingCoupon(false);
         }
-        setSavingCoupon(false);
+    };
+
+    const handleEditCoupon = (coupon: Coupon) => {
+        setEditingCouponId(coupon.id);
+        setNewCoupon({
+            code: coupon.code,
+            type: coupon.type,
+            value: Number(coupon.value),
+            max_uses: coupon.max_uses?.toString() || '',
+            end_date: coupon.end_date || '',
+            is_active: coupon.is_active
+        });
+        setShowCouponModal(true);
     };
 
     const resetCouponForm = () => {
@@ -269,9 +319,12 @@ export const MarketingView: React.FC = () => {
             end_date: '',
             is_active: true
         });
+        setEditingCouponId(null);
     };
 
+
     const toggleCouponStatus = async (id: string, currentStatus: boolean) => {
+
         const { error } = await supabase
             .from('coupons')
             .update({ is_active: !currentStatus })
@@ -483,10 +536,16 @@ export const MarketingView: React.FC = () => {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
-                                                    <button onClick={() => deleteCoupon(coupon.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
-                                                        <Trash2 size={16} />
-                                                    </button>
+                                                    <div className="flex items-center justify-end space-x-2">
+                                                        <button onClick={() => handleEditCoupon(coupon)} className="p-2 text-slate-400 hover:text-blue-500 transition-colors">
+                                                            <Edit3 size={16} />
+                                                        </button>
+                                                        <button onClick={() => deleteCoupon(coupon.id)} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
                                                 </td>
+
                                             </tr>
                                         ))}
                                     </tbody>
@@ -538,143 +597,146 @@ export const MarketingView: React.FC = () => {
             {showCouponModal && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#05070A]/80 backdrop-blur-sm animate-in fade-in duration-300">
                     <div className="bg-white dark:bg-[#0F172A] w-full max-w-lg rounded-[2rem] border border-slate-200 dark:border-white/5 shadow-2xl animate-in zoom-in-95 duration-300 overflow-hidden">
-                        <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
-                            <div className="flex items-center space-x-3 text-blue-500">
-                                <div className="p-2 bg-blue-600/10 rounded-xl"><Ticket size={20} /></div>
-                                <div>
-                                    <h3 className="text-lg font-black text-slate-900 dark:text-white">Novo Cupom</h3>
-                                    <p className="text-[10px] text-slate-500">Defina as regras do desconto</p>
-                                </div>
+                        <button onClick={() => { setShowCouponModal(false); setEditingCouponId(null); }} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><X size={20} /></button>
+                    </div>
+                    <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
+                        <div className="flex items-center space-x-3 text-blue-500">
+                            <div className="p-2 bg-blue-600/10 rounded-xl"><Ticket size={20} /></div>
+                            <div>
+                                <h3 className="text-lg font-black text-slate-900 dark:text-white">{editingCouponId ? 'Editar Cupom' : 'Novo Cupom'}</h3>
+                                <p className="text-[10px] text-slate-500">{editingCouponId ? 'Ajuste as regras do cupom' : 'Defina as regras do desconto'}</p>
                             </div>
-                            <button onClick={() => setShowCouponModal(false)} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><X size={20} /></button>
                         </div>
-                        <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
-                            <InputField label="Código do Cupom" value={newCoupon.code} onChange={v => setNewCoupon({ ...newCoupon, code: v.toUpperCase() })} placeholder="EX: AURA10" />
+                    </div>
 
-                            <div className="space-y-2">
-                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Tipo de Desconto</label>
-                                <div className="flex bg-slate-50 dark:bg-white/5 p-1 rounded-xl border border-slate-200 dark:border-white/10">
-                                    <button
-                                        onClick={() => setNewCoupon({ ...newCoupon, type: 'percentage', value: 0 })}
-                                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-2 ${newCoupon.type === 'percentage' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
-                                    >
-                                        <Percent size={14} />
-                                        <span>Porcentagem (%)</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setNewCoupon({ ...newCoupon, type: 'fixed', value: 0 })}
-                                        className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-2 ${newCoupon.type === 'fixed' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
-                                    >
-                                        <DollarIcon size={14} />
-                                        <span>Valor Fixo (R$)</span>
-                                    </button>
-                                </div>
+                    <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
+                        <InputField label="Código do Cupom" value={newCoupon.code} onChange={v => setNewCoupon({ ...newCoupon, code: v.toUpperCase() })} placeholder="EX: AURA10" />
+
+                        <div className="space-y-2">
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Tipo de Desconto</label>
+                            <div className="flex bg-slate-50 dark:bg-white/5 p-1 rounded-xl border border-slate-200 dark:border-white/10">
+                                <button
+                                    onClick={() => setNewCoupon({ ...newCoupon, type: 'percentage', value: 0 })}
+                                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-2 ${newCoupon.type === 'percentage' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
+                                >
+                                    <Percent size={14} />
+                                    <span>Porcentagem (%)</span>
+                                </button>
+                                <button
+                                    onClick={() => setNewCoupon({ ...newCoupon, type: 'fixed', value: 0 })}
+                                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-2 ${newCoupon.type === 'fixed' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
+                                >
+                                    <DollarIcon size={14} />
+                                    <span>Valor Fixo (R$)</span>
+                                </button>
                             </div>
+                        </div>
 
-                            <InputField
-                                label={newCoupon.type === 'percentage' ? "Valor do Desconto (%)" : "Valor do Desconto (R$)"}
-                                type="number"
-                                value={newCoupon.value.toString()}
-                                onChange={v => {
-                                    let val = parseFloat(v) || 0;
-                                    if (newCoupon.type === 'percentage' && val > 100) val = 100;
-                                    setNewCoupon({ ...newCoupon, value: val });
-                                }}
-                                placeholder={newCoupon.type === 'percentage' ? "10" : "50.00"}
-                            />
+                        <InputField
+                            label={newCoupon.type === 'percentage' ? "Valor do Desconto (%)" : "Valor do Desconto (R$)"}
+                            type="number"
+                            value={newCoupon.value.toString()}
+                            onChange={v => {
+                                let val = parseFloat(v) || 0;
+                                if (newCoupon.type === 'percentage' && val > 100) val = 100;
+                                setNewCoupon({ ...newCoupon, value: val });
+                            }}
+                            placeholder={newCoupon.type === 'percentage' ? "10" : "50.00"}
+                        />
 
-                            {/* Plan Preview */}
-                            <div className="space-y-3 pt-2">
-                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center justify-between">
-                                    <span>Simulação de Preços</span>
-                                    <span className="text-blue-500 bg-blue-500/10 px-1.5 py-0.5 rounded text-[8px]">Novo Valor final</span>
-                                </label>
-                                <div className="grid grid-cols-1 gap-2 bg-slate-50 dark:bg-white/[0.02] p-3 rounded-2xl border border-slate-200 dark:border-white/5 max-h-48 overflow-y-auto">
-                                    {plans.length === 0 ? (
-                                        <p className="text-[10px] text-slate-500 italic text-center py-2">Nenhum plano ativo encontrado</p>
-                                    ) : (
-                                        plans.map(plan => {
-                                            // Monthly calculation
-                                            const monthlyDiscount = newCoupon.type === 'percentage'
-                                                ? (plan.value * (newCoupon.value / 100))
-                                                : newCoupon.value;
-                                            const finalMonthly = Math.max(0, plan.value - monthlyDiscount);
+                        {/* Plan Preview */}
+                        <div className="space-y-3 pt-2">
+                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center justify-between">
+                                <span>Simulação de Preços</span>
+                                <span className="text-blue-500 bg-blue-500/10 px-1.5 py-0.5 rounded text-[8px]">Novo Valor final</span>
+                            </label>
+                            <div className="grid grid-cols-1 gap-2 bg-slate-50 dark:bg-white/[0.02] p-3 rounded-2xl border border-slate-200 dark:border-white/5 max-h-48 overflow-y-auto">
+                                {plans.length === 0 ? (
+                                    <p className="text-[10px] text-slate-500 italic text-center py-2">Nenhum plano ativo encontrado</p>
+                                ) : (
+                                    plans.map(plan => {
+                                        // Monthly calculation
+                                        const monthlyDiscount = newCoupon.type === 'percentage'
+                                            ? (plan.value * (newCoupon.value / 100))
+                                            : newCoupon.value;
+                                        const finalMonthly = Math.max(0, plan.value - monthlyDiscount);
 
-                                            // Fixed Annual prices from screenshot
-                                            const ANNUAL_PRICES: Record<string, number> = {
-                                                'Plano Starter': 890,
-                                                'Plano Pro': 2600,
-                                                'Plano Business': 4400,
-                                                'Plano Intelligence': 8900
-                                            };
+                                        // Fixed Annual prices from screenshot
+                                        const ANNUAL_PRICES: Record<string, number> = {
+                                            'Plano Starter': 890,
+                                            'Plano Pro': 2600,
+                                            'Plano Business': 4400,
+                                            'Plano Intelligence': 8900
+                                        };
 
-                                            const annualBase = ANNUAL_PRICES[plan.name] || (plan.value * 12 * 0.8);
-                                            const annualDiscount = newCoupon.type === 'percentage'
-                                                ? (annualBase * (newCoupon.value / 100))
-                                                : newCoupon.value;
-                                            const finalAnnual = Math.max(0, annualBase - annualDiscount);
+                                        const annualBase = ANNUAL_PRICES[plan.name] || (plan.value * 12 * 0.8);
+                                        const annualDiscount = newCoupon.type === 'percentage'
+                                            ? (annualBase * (newCoupon.value / 100))
+                                            : newCoupon.value;
+                                        const finalAnnual = Math.max(0, annualBase - annualDiscount);
 
-                                            return (
-                                                <div key={plan.id} className="flex flex-col py-2 border-b border-slate-100 dark:border-white/5 last:border-0">
-                                                    <div className="flex items-center justify-between mb-1">
-                                                        <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase italic">{plan.name}</span>
-                                                    </div>
-                                                    <div className="grid grid-cols-2 gap-4">
-                                                        {/* Monthly Preview */}
-                                                        <div className="flex items-center justify-between bg-slate-100/50 dark:bg-white/5 p-1.5 rounded-lg">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-[7px] font-black text-slate-500 uppercase">Mensal</span>
-                                                                <span className="text-[8px] text-slate-400 line-through">R$ {plan.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                                            </div>
-                                                            <div className="flex items-center space-x-1">
-                                                                <ArrowRight size={8} className="text-slate-400" />
-                                                                <span className="text-[10px] font-black text-emerald-500">
-                                                                    R$ {finalMonthly.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                                                </span>
-                                                            </div>
+                                        return (
+                                            <div key={plan.id} className="flex flex-col py-2 border-b border-slate-100 dark:border-white/5 last:border-0">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase italic">{plan.name}</span>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    {/* Monthly Preview */}
+                                                    <div className="flex items-center justify-between bg-slate-100/50 dark:bg-white/5 p-1.5 rounded-lg">
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[7px] font-black text-slate-500 uppercase">Mensal</span>
+                                                            <span className="text-[8px] text-slate-400 line-through">R$ {plan.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                                                         </div>
+                                                        <div className="flex items-center space-x-1">
+                                                            <ArrowRight size={8} className="text-slate-400" />
+                                                            <span className="text-[10px] font-black text-emerald-500">
+                                                                R$ {finalMonthly.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                                            </span>
+                                                        </div>
+                                                    </div>
 
-                                                        {/* Annual Preview */}
-                                                        <div className="flex items-center justify-between bg-blue-500/5 p-1.5 rounded-lg border border-blue-500/10">
-                                                            <div className="flex flex-col">
-                                                                <span className="text-[7px] font-black text-blue-500 uppercase">Anual</span>
-                                                                <span className="text-[8px] text-slate-400 line-through">R$ {annualBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                                            </div>
-                                                            <div className="flex items-center space-x-1">
-                                                                <ArrowRight size={8} className="text-slate-400" />
-                                                                <span className="text-[10px] font-black text-blue-500">
-                                                                    R$ {finalAnnual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                                                </span>
-                                                            </div>
+                                                    {/* Annual Preview */}
+                                                    <div className="flex items-center justify-between bg-blue-500/5 p-1.5 rounded-lg border border-blue-500/10">
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[7px] font-black text-blue-500 uppercase">Anual</span>
+                                                            <span className="text-[8px] text-slate-400 line-through">R$ {annualBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                        </div>
+                                                        <div className="flex items-center space-x-1">
+                                                            <ArrowRight size={8} className="text-slate-400" />
+                                                            <span className="text-[10px] font-black text-blue-500">
+                                                                R$ {finalAnnual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                                            </span>
                                                         </div>
                                                     </div>
                                                 </div>
-                                            );
-                                        })
+                                            </div>
+                                        );
+                                    })
 
 
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <InputField label="Limite de Usos" type="number" value={newCoupon.max_uses} onChange={v => setNewCoupon({ ...newCoupon, max_uses: v })} placeholder="Ex: 100" />
-                                <InputField label="Expira em" type="date" value={newCoupon.end_date} onChange={v => setNewCoupon({ ...newCoupon, end_date: v })} />
+                                )}
                             </div>
                         </div>
-                        <div className="p-6 border-t border-slate-100 dark:border-white/5 flex justify-end space-x-3">
-                            <button onClick={() => setShowCouponModal(false)} className="px-5 py-2.5 text-slate-500 hover:text-white font-bold text-sm transition-colors">Cancelar</button>
-                            <button onClick={handleSaveCoupon} disabled={savingCoupon || !newCoupon.code || newCoupon.value <= 0} className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-xl font-bold text-sm flex items-center space-x-2 shadow-lg shadow-blue-900/40 disabled:opacity-50">
-                                {savingCoupon ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={18} />}
-                                <span>{savingCoupon ? 'Salvando...' : 'Criar Cupom'}</span>
-                            </button>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <InputField label="Limite de Usos" type="number" value={newCoupon.max_uses} onChange={v => setNewCoupon({ ...newCoupon, max_uses: v })} placeholder="Ex: 100" />
+                            <InputField label="Expira em" type="date" value={newCoupon.end_date} onChange={v => setNewCoupon({ ...newCoupon, end_date: v })} />
                         </div>
+                    </div>
+                    <div className="p-6 border-t border-slate-100 dark:border-white/5 flex justify-end space-x-3">
+                        <button onClick={() => { setShowCouponModal(false); setEditingCouponId(null); }} className="px-5 py-2.5 text-slate-500 hover:text-white font-bold text-sm transition-colors">Cancelar</button>
+                        <button onClick={handleSaveCoupon} disabled={savingCoupon || !newCoupon.code || newCoupon.value <= 0} className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-xl font-bold text-sm flex items-center space-x-2 shadow-lg shadow-blue-900/40 disabled:opacity-50">
+                            {savingCoupon ? <Loader2 size={16} className="animate-spin" /> : editingCouponId ? <Save size={18} /> : <ArrowRight size={18} />}
+                            <span>{savingCoupon ? 'Salvando...' : editingCouponId ? 'Salvar Alterações' : 'Criar Cupom'}</span>
+                        </button>
                     </div>
                 </div>
             )}
         </div>
     );
 };
+
+
 
 // --- Sub-components ---
 const StatsCard: React.FC<{ icon: any, label: string, value: string | number, blue?: boolean, green?: boolean, orange?: boolean, blueSecondary?: boolean }> = ({ icon: Icon, label, value, blue, green, orange, blueSecondary }) => (
