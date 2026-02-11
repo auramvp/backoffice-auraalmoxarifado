@@ -594,26 +594,57 @@ export const MarketingView: React.FC = () => {
                                         <p className="text-[10px] text-slate-500 italic text-center py-2">Nenhum plano ativo encontrado</p>
                                     ) : (
                                         plans.map(plan => {
-                                            const discount = newCoupon.type === 'percentage'
+                                            // Monthly calculation
+                                            const monthlyDiscount = newCoupon.type === 'percentage'
                                                 ? (plan.value * (newCoupon.value / 100))
                                                 : newCoupon.value;
-                                            const finalValue = Math.max(0, plan.value - discount);
+                                            const finalMonthly = Math.max(0, plan.value - monthlyDiscount);
+
+                                            // Annual calculation (formula: monthly * 12 * 0.8)
+                                            const annualBase = plan.value * 12 * 0.8;
+                                            const annualDiscount = newCoupon.type === 'percentage'
+                                                ? (annualBase * (newCoupon.value / 100))
+                                                : newCoupon.value;
+                                            const finalAnnual = Math.max(0, annualBase - annualDiscount);
 
                                             return (
-                                                <div key={plan.id} className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-white/5 last:border-0">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300">{plan.name}</span>
-                                                        <span className="text-[8px] text-slate-400">R$ {plan.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                <div key={plan.id} className="flex flex-col py-2 border-b border-slate-100 dark:border-white/5 last:border-0">
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase italic">{plan.name}</span>
                                                     </div>
-                                                    <div className="flex items-center space-x-2">
-                                                        <ArrowRight size={10} className="text-slate-400" />
-                                                        <span className="text-xs font-black text-emerald-500">
-                                                            R$ {finalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                                        </span>
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        {/* Monthly Preview */}
+                                                        <div className="flex items-center justify-between bg-slate-100/50 dark:bg-white/5 p-1.5 rounded-lg">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[7px] font-black text-slate-500 uppercase">Mensal</span>
+                                                                <span className="text-[8px] text-slate-400 line-through">R$ {plan.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                            </div>
+                                                            <div className="flex items-center space-x-1">
+                                                                <ArrowRight size={8} className="text-slate-400" />
+                                                                <span className="text-[10px] font-black text-emerald-500">
+                                                                    R$ {finalMonthly.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Annual Preview */}
+                                                        <div className="flex items-center justify-between bg-blue-500/5 p-1.5 rounded-lg border border-blue-500/10">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-[7px] font-black text-blue-500 uppercase">Anual (-20%)</span>
+                                                                <span className="text-[8px] text-slate-400 line-through">R$ {annualBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                            </div>
+                                                            <div className="flex items-center space-x-1">
+                                                                <ArrowRight size={8} className="text-slate-400" />
+                                                                <span className="text-[10px] font-black text-blue-500">
+                                                                    R$ {finalAnnual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                                                </span>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             );
                                         })
+
                                     )}
                                 </div>
                             </div>
