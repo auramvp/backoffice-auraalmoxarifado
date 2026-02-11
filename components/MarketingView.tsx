@@ -600,8 +600,15 @@ export const MarketingView: React.FC = () => {
                                                 : newCoupon.value;
                                             const finalMonthly = Math.max(0, plan.value - monthlyDiscount);
 
-                                            // Annual calculation (formula: monthly * 12 * 0.8)
-                                            const annualBase = plan.value * 12 * 0.8;
+                                            // Fixed Annual prices from screenshot
+                                            const ANNUAL_PRICES: Record<string, number> = {
+                                                'Plano Starter': 890,
+                                                'Plano Pro': 2600,
+                                                'Plano Business': 4400,
+                                                'Plano Intelligence': 8900
+                                            };
+
+                                            const annualBase = ANNUAL_PRICES[plan.name] || (plan.value * 12 * 0.8);
                                             const annualDiscount = newCoupon.type === 'percentage'
                                                 ? (annualBase * (newCoupon.value / 100))
                                                 : newCoupon.value;
@@ -630,7 +637,7 @@ export const MarketingView: React.FC = () => {
                                                         {/* Annual Preview */}
                                                         <div className="flex items-center justify-between bg-blue-500/5 p-1.5 rounded-lg border border-blue-500/10">
                                                             <div className="flex flex-col">
-                                                                <span className="text-[7px] font-black text-blue-500 uppercase">Anual (-20%)</span>
+                                                                <span className="text-[7px] font-black text-blue-500 uppercase">Anual</span>
                                                                 <span className="text-[8px] text-slate-400 line-through">R$ {annualBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                                                             </div>
                                                             <div className="flex items-center space-x-1">
@@ -644,6 +651,7 @@ export const MarketingView: React.FC = () => {
                                                 </div>
                                             );
                                         })
+
 
                                     )}
                                 </div>
