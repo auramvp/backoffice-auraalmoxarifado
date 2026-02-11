@@ -800,7 +800,7 @@ export const MarketingView: React.FC = () => {
                         </div>
 
                         {/* Right Side: Simulation Preview */}
-                        <div className="w-full md:w-80 lg:w-96 bg-slate-50 dark:bg-[#0A0D14] p-8 flex flex-col">
+                        <div className="w-full md:w-[400px] bg-slate-50 dark:bg-[#0A0D14] p-8 flex flex-col">
                             <div className="mb-6">
                                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Preview e Simulação</h4>
                                 <h3 className="text-lg font-black text-slate-800 dark:text-white italic uppercase tracking-tight">Impacto nos Planos</h3>
@@ -808,20 +808,47 @@ export const MarketingView: React.FC = () => {
 
                             <div className="flex-1 space-y-4 overflow-y-auto pr-2 custom-scrollbar">
                                 {plans.map(plan => {
-                                    const discount = newCoupon.type === 'percentage' ? (plan.value * (newCoupon.value / 100)) : newCoupon.value;
-                                    const finalValue = Math.max(0, plan.value - discount);
+                                    // Cálculo Mensal
+                                    const monthlyDiscount = newCoupon.type === 'percentage' ? (plan.value * (newCoupon.value / 100)) : newCoupon.value;
+                                    const finalMonthly = Math.max(0, plan.value - monthlyDiscount);
+
+                                    // Cálculo Anual (Estimado com ~20% de desconto base + cupom)
+                                    const ANNUAL_PRICES: Record<string, number> = {
+                                        'Plano Starter': 890,
+                                        'Plano Pro': 2600,
+                                        'Plano Business': 4400,
+                                        'Plano Intelligence': 8900
+                                    };
+                                    const annualBase = ANNUAL_PRICES[plan.name] || (plan.value * 12 * 0.82);
+                                    const annualDiscount = newCoupon.type === 'percentage' ? (annualBase * (newCoupon.value / 100)) : newCoupon.value;
+                                    const finalAnnual = Math.max(0, annualBase - annualDiscount);
 
                                     return (
                                         <div key={plan.id} className="p-4 bg-white dark:bg-white/[0.03] rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm group hover:border-blue-500/30 transition-all">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{plan.name}</span>
-                                                <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-lg">-{newCoupon.type === 'percentage' ? `${newCoupon.value}%` : `R$ ${newCoupon.value}`}</span>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase italic">{plan.name}</span>
+                                                <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-lg">
+                                                    -{newCoupon.type === 'percentage' ? `${newCoupon.value}%` : `R$ ${newCoupon.value}`}
+                                                </span>
                                             </div>
-                                            <div className="flex flex-col">
-                                                <span className="text-[10px] text-slate-400 line-through">R$ {plan.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-lg font-black text-slate-900 dark:text-white">R$ {finalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                                    <ArrowRight size={14} className="text-blue-500 group-hover:translate-x-1 transition-transform" />
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                {/* Simulação Mensal */}
+                                                <div className="space-y-1">
+                                                    <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">MENSAL</span>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] text-slate-400 line-through">R$ {plan.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                        <span className="text-sm font-black text-slate-900 dark:text-white">R$ {finalMonthly.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Simulação Anual */}
+                                                <div className="space-y-1 border-l border-slate-100 dark:border-white/10 pl-4">
+                                                    <span className="text-[8px] font-bold text-blue-500 uppercase tracking-widest">ANUAL</span>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] text-slate-400 line-through">R$ {annualBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                        <span className="text-sm font-black text-blue-500">R$ {finalAnnual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -833,7 +860,7 @@ export const MarketingView: React.FC = () => {
                                 <div className="flex items-start space-x-3">
                                     <AlertTriangle size={18} className="text-blue-500 mt-1" />
                                     <p className="text-[10px] text-blue-600 dark:text-blue-400 font-medium leading-relaxed">
-                                        Os valores acima são estimativas mensais. Certifique-se de validar as regras antes de divulgar o código.
+                                        Valores anuais são baseados no preço promocional da plataforma. O cupom é aplicado sobre o valor vigente.
                                     </p>
                                 </div>
                             </div>
