@@ -46,7 +46,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [userProfile, setUserProfile] = useState({
     name: 'Carregando...',
     role: '...',
-    initials: '..'
+    custom_role: '',
+    initials: '..',
+    permissions: {} as Record<string, 'none' | 'view' | 'full'>
   });
 
   useEffect(() => {
@@ -57,7 +59,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         if (user && user.email) {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('name, role')
+            .select('name, role, custom_role, permissions')
             .eq('email', user.email)
             .single();
 
@@ -72,7 +74,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             setUserProfile({
               name: profile.name,
               role: profile.role,
-              initials
+              custom_role: profile.custom_role,
+              initials,
+              permissions: (profile.permissions || {}) as Record<string, 'none' | 'view' | 'full'>
             });
           }
         }
@@ -121,7 +125,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: View.PLANS, label: 'Planos', icon: Layers },
     { id: View.SUPPORT, label: 'Suporte', icon: Headphones },
     { id: View.MARKETING, label: 'Marketing', icon: Megaphone },
-  ];
+  ].filter(item => {
+    // Admin (Master) sempre vê tudo
+    if (userProfile.role === 'ADMIN') return true;
+
+    // Se for Almoxarife (Time), verifica se o nível é 'none'
+    const perm = userProfile.permissions[item.id];
+    return perm !== 'none';
+  });
 
   // Definição do Logo baseada no tema
   const logoUrl = theme === 'dark'
@@ -182,7 +193,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {!isCollapsed && (
                 <div className="text-left overflow-hidden min-w-0">
                   <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight truncate">{userProfile.name}</p>
-                  <p className="text-[9px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider truncate">{userProfile.role}</p>
+                  <p className="text-[9px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider truncate">
+                    {userProfile.custom_role || userProfile.role}
+                  </p>
                 </div>
               )}
             </div>

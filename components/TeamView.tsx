@@ -18,8 +18,9 @@ export const TeamView: React.FC = () => {
   const [newMember, setNewMember] = useState({
     name: '',
     email: '',
-    role: 'Master',
-    permissions: [] as string[],
+    role: 'Time' as 'Master' | 'Time',
+    custom_role: '', // Título customizado (ex: Suporte, Analista)
+    permissions: {} as Record<string, 'none' | 'view' | 'full'>,
     description: ''
   });
 
@@ -74,19 +75,7 @@ export const TeamView: React.FC = () => {
       .order('name');
 
     if (!error && data) {
-      // Filtra localmente para garantir que apenas quem tem acesso real apareça
-      // ADMIN: Sempre tem acesso
-      // ALMOXARIFE: Só aparece se tiver permissões definidas (objeto não vazio)
-      // Isso remove usuários ALMOXARIFE antigos/operacionais que têm permissions: {}
-      const activeBackofficeUsers = data.filter((user: any) => {
-        if (user.role === 'ADMIN') return true;
-        if (user.role === 'ALMOXARIFE') {
-          return user.permissions && Object.keys(user.permissions).length > 0;
-        }
-        return false;
-      });
-
-      setTeam(activeBackofficeUsers as any);
+      setTeam(data as any);
     }
     setLoading(false);
   };
@@ -107,6 +96,7 @@ export const TeamView: React.FC = () => {
         data: {
           name: newMember.name,
           role: newMember.role === 'Master' ? 'ADMIN' : 'ALMOXARIFE',
+          custom_role: newMember.custom_role || (newMember.role === 'Master' ? 'MASTER' : 'TIME')
         }
       }
     });
@@ -132,7 +122,8 @@ export const TeamView: React.FC = () => {
         .update({
           name: newMember.name,
           role: newMember.role === 'Master' ? 'ADMIN' : 'ALMOXARIFE',
-          permissions: permissionsToSave
+          permissions: permissionsToSave,
+          custom_role: newMember.custom_role || (newMember.role === 'Master' ? 'MASTER' : 'TIME')
         })
         .eq('id', existingUser.id)
         .select();
@@ -151,6 +142,7 @@ export const TeamView: React.FC = () => {
         email: newMember.email,
         role: newMember.role === 'Master' ? 'ADMIN' : 'ALMOXARIFE',
         permissions: permissionsToSave,
+        custom_role: newMember.custom_role || (newMember.role === 'Master' ? 'MASTER' : 'TIME')
       }]).select();
 
       data = result.data;
@@ -196,8 +188,10 @@ export const TeamView: React.FC = () => {
       setNewMember({
         name: '',
         email: '',
-        role: 'Master',
-        permissions: []
+        role: 'Time',
+        custom_role: '',
+        permissions: {},
+        description: ''
       });
 
       // Avisa que link mágico foi enviado
@@ -225,7 +219,12 @@ export const TeamView: React.FC = () => {
 
   const updatePermissionsFromDescription = (description: string) => {
     const text = description.toLowerCase();
-    const selectedPerms: string[] = [];
+    const newPermissions: Record<string, 'none' | 'view' | 'full'> = {};
+
+    // Forçar reset para 'none' antes de processar
+    Object.values(View).forEach(v => {
+      newPermissions[v] = 'none';
+    });
 
     const keywordMapping: { [key: string]: string[] } = {
       [View.DASHBOARD]: ['dashboard', 'visão geral', 'indicadores', 'graficos', 'gráficos', 'resumo', 'métricas', 'performance'],
@@ -239,22 +238,39 @@ export const TeamView: React.FC = () => {
       [View.MARKETING]: ['marketing', 'banners', 'cupons', 'campanhas', 'promoções', 'propaganda', 'avisos'],
     };
 
-    // Mapeamento extra para "suporte" - se houver um módulo futuro específico, podemos redirecionar
-    // Por enquanto, suporte costuma ver empresas e dashboards
-    if (text.includes('suporte') || text.includes('atendimento') || text.includes('chamados')) {
-      selectedPerms.push(View.COMPANIES);
-      selectedPerms.push(View.DASHBOARD);
+    // Detecção de Intensidade
+    const isFullAccess = (p: string) => {
+      const fullKeywords = ['tudo', 'total', 'gerenciar', 'setar', 'mudar', 'excluir', 'editar', 'admin', 'chefe', 'gerente', 'completo'];
+      return fullKeywords.some(kw => text.includes(kw));
+    };
+
+    const isViewOnly = (p: string) => {
+      const viewKeywords = ['ver', 'olhar', 'apenas', 'consultar', 'visualizar', 'acompanhar', 'observar'];
+      return viewKeywords.some(kw => text.includes(kw));
+    };
+
+    // Especial: Suporte
+    if (text.includes('suporte') || text.includes('atendimento')) {
+      newPermissions[View.COMPANIES] = 'view';
+      newPermissions[View.DASHBOARD] = 'view';
     }
 
     Object.entries(keywordMapping).forEach(([perm, keywords]) => {
       if (keywords.some(kw => text.includes(kw))) {
-        selectedPerms.push(perm);
+        if (isFullAccess(text)) {
+          newPermissions[perm] = 'full';
+        } else if (isViewOnly(text)) {
+          newPermissions[perm] = 'view';
+        } else {
+          // Default se citou o nome do módulo mas não especificou nível
+          newPermissions[perm] = 'full';
+        }
       }
     });
 
     setNewMember(prev => ({
       ...prev,
-      permissions: selectedPerms
+      permissions: newPermissions
     }));
   };
 
@@ -358,17 +374,33 @@ export const TeamView: React.FC = () => {
               </div>
 
               <div className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Nome Completo</label>
-                  <div className="relative">
-                    <Users2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                    <input
-                      type="text"
-                      value={newMember.name}
-                      onChange={(e) => setNewMember({ ...newMember, name: e.target.value })}
-                      className="w-full bg-black/20 border border-white/10 rounded-lg py-2 pl-10 pr-3 text-sm text-white placeholder-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all outline-none font-medium"
-                      placeholder="Ex: João Silva"
-                    />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Nome Completo</label>
+                    <div className="relative">
+                      <Users2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                      <input
+                        type="text"
+                        value={newMember.name}
+                        onChange={(e) => setNewMember({ ...newMember, name: e.target.value })}
+                        className="w-full bg-black/20 border border-white/10 rounded-lg py-2.5 pl-10 pr-3 text-sm text-white placeholder-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all outline-none font-medium"
+                        placeholder="Ex: André Costa"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Cargo / Função</label>
+                    <div className="relative">
+                      <Shield className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                      <input
+                        type="text"
+                        value={newMember.custom_role}
+                        onChange={(e) => setNewMember({ ...newMember, custom_role: e.target.value })}
+                        className="w-full bg-black/20 border border-white/10 rounded-lg py-2.5 pl-10 pr-3 text-sm text-white placeholder-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all outline-none font-medium"
+                        placeholder="Ex: Suporte, Analista..."
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -380,87 +412,104 @@ export const TeamView: React.FC = () => {
                       type="email"
                       value={newMember.email}
                       onChange={(e) => setNewMember({ ...newMember, email: e.target.value })}
-                      className="w-full bg-black/20 border border-white/10 rounded-lg py-2 pl-10 pr-3 text-sm text-white placeholder-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all outline-none font-medium"
-                      placeholder="Ex: joao@aura.com"
+                      className="w-full bg-black/20 border border-white/10 rounded-lg py-2.5 pl-10 pr-3 text-sm text-white placeholder-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all outline-none font-medium"
+                      placeholder="Ex: andre@empresa.com"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Nível de Acesso</label>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Poder de Acesso</label>
                   <div className="grid grid-cols-2 gap-2 mb-4">
-                    {['Master', 'Time'].map((role) => (
+                    {[
+                      { id: 'Master', label: 'Master (Acesso Total)', desc: 'Pode gerenciar tudo' },
+                      { id: 'Time', label: 'Time (Limitado)', desc: 'Permissões customizadas' }
+                    ].map((r) => (
                       <button
-                        key={role}
+                        key={r.id}
                         type="button"
-                        onClick={() => setNewMember({ ...newMember, role })}
-                        className={`py-2 px-3 rounded-lg text-xs font-bold transition-all border ${newMember.role === role
-                          ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/50'
+                        onClick={() => setNewMember({ ...newMember, role: r.id as any })}
+                        className={`p-3 rounded-xl text-left border transition-all ${newMember.role === r.id
+                          ? 'bg-blue-600 border-blue-500 text-white shadow-lg'
                           : 'bg-black/20 border-white/5 text-slate-500 hover:border-white/10'
                           }`}
                       >
-                        {role}
+                        <p className="text-[10px] font-black uppercase tracking-tight">{r.label}</p>
+                        <p className={`text-[8px] mt-0.5 ${newMember.role === r.id ? 'text-blue-100' : 'text-slate-600'}`}>{r.desc}</p>
                       </button>
                     ))}
                   </div>
                 </div>
 
                 {newMember.role === 'Time' && (
-                  <div className="animate-in slide-in-from-top-2 duration-300 space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">O que essa pessoa fará? (IA)</label>
+                  <div className="animate-in slide-in-from-top-2 duration-400 space-y-4">
+                    <div className="bg-blue-600/5 p-4 rounded-2xl border border-blue-500/10">
+                      <label className="block text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                        <Zap size={12} className="fill-current" />
+                        Descrição para a IA
+                      </label>
                       <textarea
                         value={newMember.description}
                         onChange={(e) => setNewMember({ ...newMember, description: e.target.value })}
-                        className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-sm text-white placeholder-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all outline-none font-medium min-h-[60px] resize-none"
-                        placeholder="Ex: Pode dar suporte, cadastrar parceiros, ver a dashboard, olhar os logs, cuida do financeiro..."
+                        className="w-full bg-transparent border-none p-0 text-sm text-white placeholder-slate-600 focus:ring-0 outline-none font-medium min-h-[50px] resize-none"
+                        placeholder="Ex: Ele pode apenas ver o financeiro e o dashboard, mas tem acesso total ao marketing."
                       />
-                      <p className="text-[9px] text-slate-500 mt-1 italic">A IA marcará as permissões abaixo automaticamente.</p>
                     </div>
 
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Permissões de Acesso</label>
-                      <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
+                    <div className="space-y-3">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Refinar Permissões por Módulo</label>
+                      <div className="space-y-2 max-h-56 overflow-y-auto pr-2 custom-scrollbar">
                         {permissionOptions.map((option) => (
-                          <button
-                            key={option.id}
-                            type="button"
-                            onClick={() => togglePermission(option.id)}
-                            className={`flex items-center space-x-2 p-2 rounded-lg text-xs border transition-all ${newMember.permissions.includes(option.id)
-                              ? 'bg-blue-600/10 border-blue-500/50 text-blue-400'
-                              : 'bg-black/20 border-white/5 text-slate-500 hover:border-white/10'
-                              }`}
-                          >
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${newMember.permissions.includes(option.id)
-                              ? 'bg-blue-500 border-blue-500'
-                              : 'border-slate-600'
-                              }`}>
-                              {newMember.permissions.includes(option.id) && <CheckCircle2 size={10} className="text-white" />}
+                          <div key={option.id} className="flex items-center justify-between p-2.5 bg-black/20 rounded-xl border border-white/5 group hover:border-white/10 transition-all">
+                            <div className="flex items-center space-x-3">
+                              <div className={`p-2 rounded-lg ${newMember.permissions[option.id] === 'full' ? 'bg-blue-600 text-white' : newMember.permissions[option.id] === 'view' ? 'bg-emerald-600/20 text-emerald-500' : 'bg-white/5 text-slate-600'}`}>
+                                <option.icon size={14} />
+                              </div>
+                              <span className="text-[11px] font-bold text-slate-300">{option.label}</span>
                             </div>
-                            <span className="font-medium truncate">{option.label}</span>
-                          </button>
+
+                            <div className="flex bg-black/40 p-1 rounded-lg border border-white/5">
+                              {[
+                                { id: 'none', label: 'Nada', color: 'hover:text-red-500' },
+                                { id: 'view', label: 'Ver', color: 'hover:text-emerald-500' },
+                                { id: 'full', label: 'Tudo', color: 'hover:text-blue-500' }
+                              ].map((lvl) => (
+                                <button
+                                  key={lvl.id}
+                                  onClick={() => setNewMember({
+                                    ...newMember,
+                                    permissions: { ...newMember.permissions, [option.id]: lvl.id as any }
+                                  })}
+                                  className={`px-3 py-1 rounded-md text-[9px] font-black uppercase transition-all ${newMember.permissions[option.id] === lvl.id
+                                    ? (lvl.id === 'full' ? 'bg-blue-600 text-white' : lvl.id === 'view' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-white')
+                                    : `text-slate-600 ${lvl.color}`
+                                    }`}
+                                >
+                                  {lvl.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         ))}
                       </div>
                     </div>
                   </div>
                 )}
-
-
               </div>
 
-              <div className="mt-6 pt-4 border-t border-white/5 flex justify-end space-x-2">
+              <div className="mt-8 pt-4 border-t border-white/5 flex justify-end items-center space-x-4">
                 <button
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 rounded-lg text-[10px] font-black text-slate-400 hover:text-white uppercase tracking-widest transition-colors"
+                  className="text-[10px] font-black text-slate-500 hover:text-white uppercase tracking-widest transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleAddMember}
-                  className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-900/20 flex items-center space-x-2 transition-all hover:scale-105 active:scale-95"
+                  className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-900/40 flex items-center space-x-3 transition-all active:scale-95"
                 >
-                  <UserPlus size={14} strokeWidth={3} />
-                  <span>Cadastrar</span>
+                  <ShieldCheck size={16} strokeWidth={2.5} />
+                  <span>Cadastrar Acesso</span>
                 </button>
               </div>
             </div>
