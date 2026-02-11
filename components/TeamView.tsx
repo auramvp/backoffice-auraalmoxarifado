@@ -228,16 +228,23 @@ export const TeamView: React.FC = () => {
     const selectedPerms: string[] = [];
 
     const keywordMapping: { [key: string]: string[] } = {
-      [View.DASHBOARD]: ['dashboard', 'visão geral', 'indicadores', 'graficos', 'gráficos', 'resumo'],
-      [View.TEAM]: ['time', 'equipe', 'membros', 'acessos', 'permissoes', 'permissões', 'usuarios backoffice'],
-      [View.LOG]: ['logs', 'atividades', 'historico', 'histórico', 'rastreamento', 'auditoria'],
-      [View.USERS]: ['usuarios', 'usuários', 'clientes', 'contas', 'saas'],
-      [View.COMPANIES]: ['empresas', 'negocios', 'negócios', 'cnpj', 'parceiros'],
-      [View.FINANCE]: ['financeiro', 'pagamentos', 'faturamento', 'dinheiro', 'vendas', 'cobrança', 'asaas'],
-      [View.SUBSCRIPTIONS]: ['assinaturas', 'planos', 'mensalidades', 'ciclos'],
-      [View.TAX_RECOVERY]: ['tributaria', 'tributária', 'impostos', 'recuperação', 'fiscal'],
-      [View.MARKETING]: ['marketing', 'banners', 'cupons', 'campanhas', 'promoções'],
+      [View.DASHBOARD]: ['dashboard', 'visão geral', 'indicadores', 'graficos', 'gráficos', 'resumo', 'métricas', 'performance'],
+      [View.TEAM]: ['time', 'equipe', 'membros', 'acessos', 'permissoes', 'permissões', 'usuarios backoffice', 'gestão de pessoas'],
+      [View.LOG]: ['logs', 'atividades', 'historico', 'histórico', 'rastreamento', 'auditoria', 'eventos', 'quem fez o que'],
+      [View.USERS]: ['usuarios', 'usuários', 'clientes', 'contas', 'saas', 'gestão de usuários', 'ver usuários'],
+      [View.COMPANIES]: ['empresas', 'negocios', 'negócios', 'cnpj', 'parceiros', 'unidades', 'ver empresas', 'cadastrar parceiros'],
+      [View.FINANCE]: ['financeiro', 'pagamentos', 'faturamento', 'dinheiro', 'vendas', 'cobrança', 'asaas', 'faturas', 'contas a pagar', 'contas a receber', 'realizando cobranças'],
+      [View.SUBSCRIPTIONS]: ['assinaturas', 'planos', 'mensalidades', 'ciclos', 'recorrência', 'cancelamentos'],
+      [View.TAX_RECOVERY]: ['tributaria', 'tributária', 'impostos', 'recuperação', 'fiscal', 'revisão fiscal', 'créditos'],
+      [View.MARKETING]: ['marketing', 'banners', 'cupons', 'campanhas', 'promoções', 'propaganda', 'avisos'],
     };
+
+    // Mapeamento extra para "suporte" - se houver um módulo futuro específico, podemos redirecionar
+    // Por enquanto, suporte costuma ver empresas e dashboards
+    if (text.includes('suporte') || text.includes('atendimento') || text.includes('chamados')) {
+      selectedPerms.push(View.COMPANIES);
+      selectedPerms.push(View.DASHBOARD);
+    }
 
     Object.entries(keywordMapping).forEach(([perm, keywords]) => {
       if (keywords.some(kw => text.includes(kw))) {
@@ -406,7 +413,7 @@ export const TeamView: React.FC = () => {
                         value={newMember.description}
                         onChange={(e) => setNewMember({ ...newMember, description: e.target.value })}
                         className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-sm text-white placeholder-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all outline-none font-medium min-h-[60px] resize-none"
-                        placeholder="Ex: Cuida do financeiro e vê os logs..."
+                        placeholder="Ex: Pode dar suporte, cadastrar parceiros, ver a dashboard, olhar os logs, cuida do financeiro..."
                       />
                       <p className="text-[9px] text-slate-500 mt-1 italic">A IA marcará as permissões abaixo automaticamente.</p>
                     </div>

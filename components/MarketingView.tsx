@@ -19,6 +19,8 @@ interface Banner {
     end_date: string | null;
     clicks: number;
     impressions: number;
+    target_type: 'all' | 'partners' | 'plan';
+    target_value: string | null;
     created_at: string;
 }
 
@@ -40,6 +42,52 @@ interface Plan {
     value: number;
 }
 
+// --- Sub-components ---
+const StatsCard: React.FC<{ icon: any, label: string, value: string | number, blue?: boolean, green?: boolean, orange?: boolean, blueSecondary?: boolean }> = ({ icon: Icon, label, value, blue, green, orange, blueSecondary }) => (
+    <div className="bg-white dark:bg-[#0A0D14] p-5 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm">
+        <div className="flex items-center space-x-3">
+            <div className={`p-2.5 rounded-xl ${blue ? 'bg-blue-500/10 text-blue-500' : green ? 'bg-emerald-500/10 text-emerald-500' : blueSecondary ? 'bg-indigo-500/10 text-indigo-500' : 'bg-orange-500/10 text-orange-500'}`}>
+                <Icon size={20} />
+            </div>
+            <div>
+                <p className="text-2xl font-black text-slate-900 dark:text-white leading-none">{value}</p>
+                <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mt-1">{label}</p>
+            </div>
+        </div>
+    </div>
+);
+
+const InputField: React.FC<{ label: string, value: string, onChange: (v: string) => void, placeholder?: string, icon?: any, type?: string }> = ({ label, value, onChange, placeholder, icon: Icon, type = 'text' }) => (
+    <div className="space-y-2">
+        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">{label}</label>
+        <div className="relative">
+            {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />}
+            <input
+                type={type}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                className={`w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl py-2.5 px-4 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all ${Icon ? 'pl-10' : ''}`}
+                placeholder={placeholder}
+            />
+        </div>
+    </div>
+);
+
+const LoadingState: React.FC<{ text: string }> = ({ text }) => (
+    <div className="py-20 text-center bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5">
+        <Loader2 size={32} className="text-blue-500 animate-spin mx-auto mb-4" />
+        <p className="text-sm font-black text-slate-500 uppercase tracking-widest">{text}</p>
+    </div>
+);
+
+const EmptyState: React.FC<{ icon: any, title: string, description: string }> = ({ icon: Icon, title, description }) => (
+    <div className="py-20 text-center bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5">
+        <div className="p-4 bg-blue-500/10 rounded-full w-fit mx-auto mb-4"><Icon size={32} className="text-blue-500" /></div>
+        <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">{title}</h3>
+        <p className="text-sm text-slate-500 mb-6">{description}</p>
+    </div>
+);
+
 export const MarketingView: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'banners' | 'coupons'>('banners');
     const [banners, setBanners] = useState<Banner[]>([]);
@@ -57,8 +105,11 @@ export const MarketingView: React.FC = () => {
         destination_url: '',
         start_date: '',
         end_date: '',
+        target_type: 'all' as 'all' | 'partners' | 'plan',
+        target_value: '',
         is_active: true
     });
+    const [editingBannerId, setEditingBannerId] = useState<string | null>(null);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -176,27 +227,64 @@ export const MarketingView: React.FC = () => {
             ? null
             : newBanner.destination_url.trim();
 
-        const { data, error } = await supabase
-            .from('banners')
-            .insert([{
-                title: newBanner.title,
-                image_url: newBanner.image_url,
-                destination_url: cleanDestinationUrl,
-                start_date: newBanner.start_date || null,
-                end_date: newBanner.end_date || null,
-                is_active: newBanner.is_active,
-                created_by: user?.id
-            }])
-            .select();
+        const bannerData = {
+            title: newBanner.title,
+            image_url: newBanner.image_url,
+            destination_url: cleanDestinationUrl,
+            start_date: newBanner.start_date || null,
+            end_date: newBanner.end_date || null,
+            target_type: newBanner.target_type,
+            target_value: newBanner.target_type === 'plan' ? newBanner.target_value : null,
+            is_active: newBanner.is_active,
+            created_by: user?.id
+        };
 
-        if (!error && data) {
-            setBanners([data[0] as Banner, ...banners]);
-            setShowBannerModal(false);
-            resetBannerForm();
+        if (editingBannerId) {
+            const { error } = await supabase
+                .from('banners')
+                .update(bannerData)
+                .eq('id', editingBannerId);
+
+            if (!error) {
+                await logAction('Banner Atualizado', `O banner ${newBanner.title} foi atualizado.`);
+                fetchBanners();
+                setShowBannerModal(false);
+                resetBannerForm();
+            } else {
+                alert('Erro ao atualizar banner: ' + error.message);
+            }
         } else {
-            alert('Erro ao salvar banner: ' + error?.message);
+            const { data, error } = await supabase
+                .from('banners')
+                .insert([bannerData])
+                .select();
+
+            if (!error && data) {
+                await logAction('Novo Banner Criado', `O banner ${newBanner.title} foi criado.`);
+                setBanners([data[0] as Banner, ...banners]);
+                setShowBannerModal(false);
+                resetBannerForm();
+            } else {
+                alert('Erro ao salvar banner: ' + error?.message);
+            }
         }
         setSavingBanner(false);
+    };
+
+    const handleEditBanner = (banner: Banner) => {
+        setEditingBannerId(banner.id);
+        setNewBanner({
+            title: banner.title,
+            image_url: banner.image_url,
+            destination_url: banner.destination_url || '',
+            start_date: banner.start_date ? banner.start_date.split('T')[0] : '',
+            end_date: banner.end_date ? banner.end_date.split('T')[0] : '',
+            target_type: banner.target_type || 'all',
+            target_value: banner.target_value || '',
+            is_active: banner.is_active
+        });
+        setPreviewImage(banner.image_url);
+        setShowBannerModal(true);
     };
 
     const resetBannerForm = () => {
@@ -206,8 +294,11 @@ export const MarketingView: React.FC = () => {
             destination_url: '',
             start_date: '',
             end_date: '',
+            target_type: 'all',
+            target_value: '',
             is_active: true
         });
+        setEditingBannerId(null);
         setPreviewImage(null);
     };
 
@@ -451,9 +542,14 @@ export const MarketingView: React.FC = () => {
                                             </div>
                                         </div>
                                         <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-white/5">
-                                            <button onClick={() => toggleBannerStatus(banner.id, banner.is_active)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${banner.is_active ? 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-red-100 hover:text-red-500' : 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white'}`}>
-                                                {banner.is_active ? 'Desativar' : 'Ativar'}
-                                            </button>
+                                            <div className="flex items-center space-x-2">
+                                                <button onClick={() => toggleBannerStatus(banner.id, banner.is_active)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${banner.is_active ? 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-red-100 hover:text-red-500' : 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white'}`}>
+                                                    {banner.is_active ? 'Desativar' : 'Ativar'}
+                                                </button>
+                                                <button onClick={() => handleEditBanner(banner)} className="p-1.5 text-slate-400 hover:text-blue-500 transition-colors">
+                                                    <Edit3 size={16} />
+                                                </button>
+                                            </div>
                                             <button onClick={() => deleteBanner(banner.id)} className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
                                         </div>
                                     </div>
@@ -581,6 +677,41 @@ export const MarketingView: React.FC = () => {
                                 <InputField label="Data Início" icon={Calendar} type="date" value={newBanner.start_date} onChange={v => setNewBanner({ ...newBanner, start_date: v })} />
                                 <InputField label="Data Fim" icon={Calendar} type="date" value={newBanner.end_date} onChange={v => setNewBanner({ ...newBanner, end_date: v })} />
                             </div>
+
+                            <div className="space-y-2">
+                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Público-Alvo</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {[
+                                        { id: 'all', label: 'Todos' },
+                                        { id: 'partners', label: 'Parceiros' },
+                                        { id: 'plan', label: 'Plano Espec.' }
+                                    ].map(t => (
+                                        <button
+                                            key={t.id}
+                                            onClick={() => setNewBanner({ ...newBanner, target_type: t.id as any })}
+                                            className={`py-2 rounded-lg text-[10px] font-bold transition-all border ${newBanner.target_type === t.id ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500'}`}
+                                        >
+                                            {t.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {newBanner.target_type === 'plan' && (
+                                <div className="animate-in slide-in-from-top-2">
+                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Selecione o Plano</label>
+                                    <select
+                                        value={newBanner.target_value}
+                                        onChange={(e) => setNewBanner({ ...newBanner, target_value: e.target.value })}
+                                        className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl py-2.5 px-4 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all appearance-none"
+                                    >
+                                        <option value="">Selecione um plano...</option>
+                                        {plans.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                         </div>
                         <div className="p-6 border-t border-slate-100 dark:border-white/5 flex justify-end space-x-3">
                             <button onClick={() => setShowBannerModal(false)} className="px-5 py-2.5 text-slate-500 hover:text-white font-bold text-sm transition-colors">Cancelar</button>
@@ -595,191 +726,121 @@ export const MarketingView: React.FC = () => {
 
             {/* Coupon Modal */}
             {showCouponModal && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#05070A]/80 backdrop-blur-sm animate-in fade-in duration-300">
-                    <div className="bg-white dark:bg-[#0F172A] w-full max-w-lg rounded-[2rem] border border-slate-200 dark:border-white/5 shadow-2xl animate-in zoom-in-95 duration-300 overflow-hidden">
-                        <button onClick={() => { setShowCouponModal(false); setEditingCouponId(null); }} className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><X size={20} /></button>
-                    </div>
-                    <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
-                        <div className="flex items-center space-x-3 text-blue-500">
-                            <div className="p-2 bg-blue-600/10 rounded-xl"><Ticket size={20} /></div>
-                            <div>
-                                <h3 className="text-lg font-black text-slate-900 dark:text-white">{editingCouponId ? 'Editar Cupom' : 'Novo Cupom'}</h3>
-                                <p className="text-[10px] text-slate-500">{editingCouponId ? 'Ajuste as regras do cupom' : 'Defina as regras do desconto'}</p>
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#05070A]/80 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-[#0F172A] w-full max-w-4xl rounded-[2.5rem] border border-slate-200 dark:border-white/5 shadow-2xl animate-in zoom-in-95 duration-300 overflow-hidden flex flex-col md:flex-row h-fit max-h-[90vh]">
+                        {/* Left Side: Form */}
+                        <div className="flex-1 p-8 overflow-y-auto border-r border-slate-100 dark:border-white/5">
+                            <div className="flex items-center space-x-3 mb-8">
+                                <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg shadow-blue-500/20">
+                                    <Tag size={24} />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Configurar Desconto</h3>
+                                    <p className="text-xs text-slate-500 font-medium">Defina as regras e validade do cupom</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-6">
+                                <InputField
+                                    label="Código do Cupom"
+                                    value={newCoupon.code}
+                                    onChange={v => setNewCoupon({ ...newCoupon, code: v.toUpperCase() })}
+                                    placeholder="EX: AURA10"
+                                />
+
+                                <div className="space-y-3">
+                                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Tipo de Desconto</label>
+                                    <div className="flex bg-slate-100 dark:bg-white/5 p-1.5 rounded-2xl border border-slate-200 dark:border-white/10">
+                                        <button
+                                            onClick={() => setNewCoupon({ ...newCoupon, type: 'percentage' })}
+                                            className={`flex-1 py-3 rounded-xl text-xs font-black transition-all flex items-center justify-center space-x-2 ${newCoupon.type === 'percentage' ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-md' : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
+                                        >
+                                            <Percent size={14} />
+                                            <span>Porcentagem</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setNewCoupon({ ...newCoupon, type: 'fixed' })}
+                                            className={`flex-1 py-3 rounded-xl text-xs font-black transition-all flex items-center justify-center space-x-2 ${newCoupon.type === 'fixed' ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-md' : 'text-slate-500 hover:text-slate-700 dark:hover:text-white'}`}
+                                        >
+                                            <DollarIcon size={14} />
+                                            <span>Valor Fixo</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <InputField
+                                    label={newCoupon.type === 'percentage' ? "Valor do Desconto (%)" : "Valor do Desconto (R$)"}
+                                    type="number"
+                                    value={newCoupon.value.toString()}
+                                    onChange={v => {
+                                        let val = parseFloat(v) || 0;
+                                        if (newCoupon.type === 'percentage' && val > 100) val = 100;
+                                        setNewCoupon({ ...newCoupon, value: val });
+                                    }}
+                                    placeholder={newCoupon.type === 'percentage' ? "10" : "50.00"}
+                                />
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <InputField label="Limite de Usos" type="number" value={newCoupon.max_uses || ''} onChange={v => setNewCoupon({ ...newCoupon, max_uses: v })} placeholder="∞" />
+                                    <InputField label="Data de Expiração" type="date" value={newCoupon.end_date || ''} onChange={v => setNewCoupon({ ...newCoupon, end_date: v })} />
+                                </div>
+                            </div>
+
+                            <div className="mt-10 flex items-center space-x-3">
+                                <button onClick={() => { setShowCouponModal(false); setEditingCouponId(null); }} className="flex-1 py-4 text-slate-500 hover:text-slate-900 dark:hover:text-white font-black text-xs uppercase tracking-widest transition-all">Cancelar</button>
+                                <button
+                                    onClick={handleSaveCoupon}
+                                    disabled={savingCoupon || !newCoupon.code || newCoupon.value <= 0}
+                                    className="flex-[2] py-4 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center space-x-2 shadow-xl shadow-blue-500/20 disabled:opacity-50 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                >
+                                    {savingCoupon ? <Loader2 size={16} className="animate-spin" /> : editingCouponId ? <Save size={18} /> : <CheckCircle2 size={18} />}
+                                    <span>{savingCoupon ? 'Salvando...' : editingCouponId ? 'Salvar Cupom' : 'Criar Cupom'}</span>
+                                </button>
                             </div>
                         </div>
-                    </div>
 
-                    <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
-                        <InputField label="Código do Cupom" value={newCoupon.code} onChange={v => setNewCoupon({ ...newCoupon, code: v.toUpperCase() })} placeholder="EX: AURA10" />
-
-                        <div className="space-y-2">
-                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Tipo de Desconto</label>
-                            <div className="flex bg-slate-50 dark:bg-white/5 p-1 rounded-xl border border-slate-200 dark:border-white/10">
-                                <button
-                                    onClick={() => setNewCoupon({ ...newCoupon, type: 'percentage', value: 0 })}
-                                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-2 ${newCoupon.type === 'percentage' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
-                                >
-                                    <Percent size={14} />
-                                    <span>Porcentagem (%)</span>
-                                </button>
-                                <button
-                                    onClick={() => setNewCoupon({ ...newCoupon, type: 'fixed', value: 0 })}
-                                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-2 ${newCoupon.type === 'fixed' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
-                                >
-                                    <DollarIcon size={14} />
-                                    <span>Valor Fixo (R$)</span>
-                                </button>
+                        {/* Right Side: Simulation Preview */}
+                        <div className="w-full md:w-80 lg:w-96 bg-slate-50 dark:bg-[#0A0D14] p-8 flex flex-col">
+                            <div className="mb-6">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Preview e Simulação</h4>
+                                <h3 className="text-lg font-black text-slate-800 dark:text-white italic uppercase tracking-tight">Impacto nos Planos</h3>
                             </div>
-                        </div>
 
-                        <InputField
-                            label={newCoupon.type === 'percentage' ? "Valor do Desconto (%)" : "Valor do Desconto (R$)"}
-                            type="number"
-                            value={newCoupon.value.toString()}
-                            onChange={v => {
-                                let val = parseFloat(v) || 0;
-                                if (newCoupon.type === 'percentage' && val > 100) val = 100;
-                                setNewCoupon({ ...newCoupon, value: val });
-                            }}
-                            placeholder={newCoupon.type === 'percentage' ? "10" : "50.00"}
-                        />
+                            <div className="flex-1 space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+                                {plans.map(plan => {
+                                    const discount = newCoupon.type === 'percentage' ? (plan.value * (newCoupon.value / 100)) : newCoupon.value;
+                                    const finalValue = Math.max(0, plan.value - discount);
 
-                        {/* Plan Preview */}
-                        <div className="space-y-3 pt-2">
-                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center justify-between">
-                                <span>Simulação de Preços</span>
-                                <span className="text-blue-500 bg-blue-500/10 px-1.5 py-0.5 rounded text-[8px]">Novo Valor final</span>
-                            </label>
-                            <div className="grid grid-cols-1 gap-2 bg-slate-50 dark:bg-white/[0.02] p-3 rounded-2xl border border-slate-200 dark:border-white/5 max-h-48 overflow-y-auto">
-                                {plans.length === 0 ? (
-                                    <p className="text-[10px] text-slate-500 italic text-center py-2">Nenhum plano ativo encontrado</p>
-                                ) : (
-                                    plans.map(plan => {
-                                        // Monthly calculation
-                                        const monthlyDiscount = newCoupon.type === 'percentage'
-                                            ? (plan.value * (newCoupon.value / 100))
-                                            : newCoupon.value;
-                                        const finalMonthly = Math.max(0, plan.value - monthlyDiscount);
-
-                                        // Fixed Annual prices from screenshot
-                                        const ANNUAL_PRICES: Record<string, number> = {
-                                            'Plano Starter': 890,
-                                            'Plano Pro': 2600,
-                                            'Plano Business': 4400,
-                                            'Plano Intelligence': 8900
-                                        };
-
-                                        const annualBase = ANNUAL_PRICES[plan.name] || (plan.value * 12 * 0.8);
-                                        const annualDiscount = newCoupon.type === 'percentage'
-                                            ? (annualBase * (newCoupon.value / 100))
-                                            : newCoupon.value;
-                                        const finalAnnual = Math.max(0, annualBase - annualDiscount);
-
-                                        return (
-                                            <div key={plan.id} className="flex flex-col py-2 border-b border-slate-100 dark:border-white/5 last:border-0">
-                                                <div className="flex items-center justify-between mb-1">
-                                                    <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase italic">{plan.name}</span>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    {/* Monthly Preview */}
-                                                    <div className="flex items-center justify-between bg-slate-100/50 dark:bg-white/5 p-1.5 rounded-lg">
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[7px] font-black text-slate-500 uppercase">Mensal</span>
-                                                            <span className="text-[8px] text-slate-400 line-through">R$ {plan.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                                        </div>
-                                                        <div className="flex items-center space-x-1">
-                                                            <ArrowRight size={8} className="text-slate-400" />
-                                                            <span className="text-[10px] font-black text-emerald-500">
-                                                                R$ {finalMonthly.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Annual Preview */}
-                                                    <div className="flex items-center justify-between bg-blue-500/5 p-1.5 rounded-lg border border-blue-500/10">
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[7px] font-black text-blue-500 uppercase">Anual</span>
-                                                            <span className="text-[8px] text-slate-400 line-through">R$ {annualBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                                        </div>
-                                                        <div className="flex items-center space-x-1">
-                                                            <ArrowRight size={8} className="text-slate-400" />
-                                                            <span className="text-[10px] font-black text-blue-500">
-                                                                R$ {finalAnnual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                                            </span>
-                                                        </div>
-                                                    </div>
+                                    return (
+                                        <div key={plan.id} className="p-4 bg-white dark:bg-white/[0.03] rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm group hover:border-blue-500/30 transition-all">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{plan.name}</span>
+                                                <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-lg">-{newCoupon.type === 'percentage' ? `${newCoupon.value}%` : `R$ ${newCoupon.value}`}</span>
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] text-slate-400 line-through">R$ {plan.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-lg font-black text-slate-900 dark:text-white">R$ {finalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                                    <ArrowRight size={14} className="text-blue-500 group-hover:translate-x-1 transition-transform" />
                                                 </div>
                                             </div>
-                                        );
-                                    })
+                                        </div>
+                                    );
+                                })}
+                            </div>
 
-
-                                )}
+                            <div className="mt-8 p-4 bg-blue-600/5 dark:bg-blue-500/5 rounded-2xl border border-blue-500/10">
+                                <div className="flex items-start space-x-3">
+                                    <AlertTriangle size={18} className="text-blue-500 mt-1" />
+                                    <p className="text-[10px] text-blue-600 dark:text-blue-400 font-medium leading-relaxed">
+                                        Os valores acima são estimativas mensais. Certifique-se de validar as regras antes de divulgar o código.
+                                    </p>
+                                </div>
                             </div>
                         </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <InputField label="Limite de Usos" type="number" value={newCoupon.max_uses} onChange={v => setNewCoupon({ ...newCoupon, max_uses: v })} placeholder="Ex: 100" />
-                            <InputField label="Expira em" type="date" value={newCoupon.end_date} onChange={v => setNewCoupon({ ...newCoupon, end_date: v })} />
-                        </div>
-                    </div>
-                    <div className="p-6 border-t border-slate-100 dark:border-white/5 flex justify-end space-x-3">
-                        <button onClick={() => { setShowCouponModal(false); setEditingCouponId(null); }} className="px-5 py-2.5 text-slate-500 hover:text-white font-bold text-sm transition-colors">Cancelar</button>
-                        <button onClick={handleSaveCoupon} disabled={savingCoupon || !newCoupon.code || newCoupon.value <= 0} className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-xl font-bold text-sm flex items-center space-x-2 shadow-lg shadow-blue-900/40 disabled:opacity-50">
-                            {savingCoupon ? <Loader2 size={16} className="animate-spin" /> : editingCouponId ? <Save size={18} /> : <ArrowRight size={18} />}
-                            <span>{savingCoupon ? 'Salvando...' : editingCouponId ? 'Salvar Alterações' : 'Criar Cupom'}</span>
-                        </button>
                     </div>
                 </div>
             )}
         </div>
     );
 };
-
-
-
-// --- Sub-components ---
-const StatsCard: React.FC<{ icon: any, label: string, value: string | number, blue?: boolean, green?: boolean, orange?: boolean, blueSecondary?: boolean }> = ({ icon: Icon, label, value, blue, green, orange, blueSecondary }) => (
-    <div className="bg-white dark:bg-[#0A0D14] p-5 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm">
-        <div className="flex items-center space-x-3">
-            <div className={`p-2.5 rounded-xl ${blue ? 'bg-blue-500/10 text-blue-500' : green ? 'bg-emerald-500/10 text-emerald-500' : blueSecondary ? 'bg-indigo-500/10 text-indigo-500' : 'bg-orange-500/10 text-orange-500'}`}>
-                <Icon size={20} />
-            </div>
-            <div>
-                <p className="text-2xl font-black text-slate-900 dark:text-white leading-none">{value}</p>
-                <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mt-1">{label}</p>
-            </div>
-        </div>
-    </div>
-);
-
-const InputField: React.FC<{ label: string, value: string, onChange: (v: string) => void, placeholder?: string, icon?: any, type?: string }> = ({ label, value, onChange, placeholder, icon: Icon, type = 'text' }) => (
-    <div className="space-y-2">
-        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest">{label}</label>
-        <div className="relative">
-            {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />}
-            <input
-                type={type}
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                className={`w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl py-2.5 px-4 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all ${Icon ? 'pl-10' : ''}`}
-                placeholder={placeholder}
-            />
-        </div>
-    </div>
-);
-
-const LoadingState: React.FC<{ text: string }> = ({ text }) => (
-    <div className="py-20 text-center bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5">
-        <Loader2 size={32} className="text-blue-500 animate-spin mx-auto mb-4" />
-        <p className="text-sm font-black text-slate-500 uppercase tracking-widest">{text}</p>
-    </div>
-);
-
-const EmptyState: React.FC<{ icon: any, title: string, description: string }> = ({ icon: Icon, title, description }) => (
-    <div className="py-20 text-center bg-white dark:bg-[#0A0D14] rounded-3xl border border-slate-200 dark:border-white/5">
-        <div className="p-4 bg-blue-500/10 rounded-full w-fit mx-auto mb-4"><Icon size={32} className="text-blue-500" /></div>
-        <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">{title}</h3>
-        <p className="text-sm text-slate-500 mb-6">{description}</p>
-    </div>
-);
