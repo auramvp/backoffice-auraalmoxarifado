@@ -108,72 +108,145 @@ serve(async (req) => {
         }
 
         if (action === 'sync_financials') {
-            const { data: companies, error } = await supabase
-                .from('companies')
-                .select('id, asaas_customer_id, name')
-                .not('asaas_customer_id', 'is', null)
+            const { companyId } = await req.json().catch(() => ({}))
 
-            if (error) throw error
+            let query = supabase.from('companies').select('id, name, cnpj, asaas_customer_id')
+            if (companyId) query = query.eq('id', companyId)
+
+            const { data: companies } = await query
+            if (!companies) throw new Error('No companies found')
 
             const results = []
 
             for (const company of companies) {
-                console.log(`Buscando pagamentos para: ${company.name} (${company.asaas_customer_id})`)
-                const response = await fetch(`${asaasApiUrl}/payments?customer=${company.asaas_customer_id}&limit=50`, {
-                    headers: { 'access_token': asaasApiKey }
-                })
+                if (!company.cnpj && !company.asaas_customer_id) continue;
 
-                if (response.ok) {
-                    const data = await response.json()
-                    const payments = data.data || []
-                    console.log(`Encontrados ${payments.length} pagamentos para ${company.name}`)
-                    if (payments.length > 0) {
-                        console.log('Exemplos de pagamentos:', JSON.stringify(payments.slice(0, 5), null, 2))
+                // 1. Find all Asaas customers for this CPF/CNPJ (to handle duplicates/fragmentation)
+                let allCustomerIds = []
+                const cpfCnpj = (company.cnpj || '').replace(/\D/g, '')
+
+                if (cpfCnpj) {
+                    const searchRes = await fetch(`${asaasApiUrl}/customers?cpfCnpj=${cpfCnpj}`, {
+                        headers: { 'access_token': asaasApiKey }
+                    })
+                    if (searchRes.ok) {
+                        const searchData = await searchRes.json()
+                        allCustomerIds = (searchData.data || []).map((c: any) => c.id)
                     }
-                    let count = 0
+                }
+
+                // Add the one already linked if not in list
+                if (company.asaas_customer_id && !allCustomerIds.includes(company.asaas_customer_id)) {
+                    allCustomerIds.push(company.asaas_customer_id)
+                }
+
+                console.log(`Syncing ${allCustomerIds.length} Asaas accounts for company ${company.name}`)
+                let companyCount = 0
+
+                for (const customerId of allCustomerIds) {
+                    const response = await fetch(`${asaasApiUrl}/payments?customer=${customerId}&limit=100`, {
+                        headers: { 'access_token': asaasApiKey }
+                    })
+
+                    if (!response.ok) continue
+                    const { data: payments } = await response.json()
 
                     for (const payment of payments) {
                         let status = 'open'
                         if (['CONFIRMED', 'RECEIVED', 'RECEIVED_IN_CASH'].includes(payment.status)) status = 'paid'
                         if (['OVERDUE'].includes(payment.status)) status = 'overdue'
+                        if (['REFUNDED', 'REFUND_REQUESTED', 'CHARGEBACK_REQUESTED', 'CHARGEBACK_DISPUTE', 'AWAITING_CHARGEBACK_REVERSAL', 'REFUND_IN_PROGRESS'].includes(payment.status)) status = 'refunded'
+                        if (['CANCELLED'].includes(payment.status)) status = 'canceled'
 
+                        // Try to find by asaas_id first
                         const { data: existing } = await supabase
                             .from('invoices')
                             .select('id')
-                            .eq('company_id', company.id)
-                            .eq('amount', payment.value)
-                            .eq('due_date', payment.dueDate)
+                            .eq('asaas_id', payment.id)
                             .limit(1)
 
                         if (!existing || existing.length === 0) {
-                            const { error: insertError } = await supabase.from('invoices').insert({
-                                company_id: company.id,
-                                amount: payment.value,
-                                status: status,
-                                billing_date: payment.paymentDate || payment.clientPaymentDate || new Date().toISOString(),
-                                due_date: payment.dueDate,
-                                payment_method: payment.billingType === 'PIX' ? 'pix' : payment.billingType === 'BOLETO' ? 'boleto' : 'credit_card',
-                                description: payment.description || 'Assinatura Aura (Sincronizada)',
-                                plan_name: 'Plano Aura'
-                            })
+                            // Fallback for old ones without asaas_id: check by company, amount and due_date
+                            const { data: legacyExisting } = await supabase
+                                .from('invoices')
+                                .select('id')
+                                .eq('company_id', company.id)
+                                .eq('amount', payment.value)
+                                .eq('due_date', payment.dueDate)
+                                .is('asaas_id', null)
+                                .limit(1)
 
-                            if (insertError) {
-                                console.error(`Erro ao inserir fatura para ${company.name}:`, insertError)
+                            if (legacyExisting && legacyExisting.length > 0) {
+                                await supabase
+                                    .from('invoices')
+                                    .update({
+                                        asaas_id: payment.id,
+                                        status: status,
+                                        payment_method: payment.billingType === 'PIX' ? 'pix' : payment.billingType === 'BOLETO' ? 'boleto' : 'credit_card'
+                                    })
+                                    .eq('id', legacyExisting[0].id)
                             } else {
-                                count++
+                                const { error: insertError } = await supabase.from('invoices').insert({
+                                    company_id: company.id,
+                                    asaas_id: payment.id,
+                                    amount: payment.value,
+                                    status: status,
+                                    billing_date: payment.paymentDate || payment.clientPaymentDate || new Date().toISOString(),
+                                    due_date: payment.dueDate,
+                                    payment_method: payment.billingType === 'PIX' ? 'pix' : payment.billingType === 'BOLETO' ? 'boleto' : 'credit_card',
+                                    description: payment.description || 'Assinatura Aura (Sincronizada)',
+                                    plan_name: 'Plano Aura'
+                                })
+                                if (!insertError) companyCount++
                             }
                         } else {
-                            await supabase.from('invoices').update({ status: status }).eq('id', existing[0].id)
+                            await supabase.from('invoices').update({
+                                status: status,
+                                payment_method: payment.billingType === 'PIX' ? 'pix' : payment.billingType === 'BOLETO' ? 'boleto' : 'credit_card'
+                            }).eq('id', existing[0].id)
                         }
                     }
-                    results.push({ company: company.name, synced: count })
-                } else {
-                    const errorMsg = await response.text()
-                    results.push({ company: company.name, error: 'Failed to fetch payments', details: errorMsg })
                 }
+                results.push({ company: company.name, synced: companyCount })
             }
 
-            return new Response(JSON.stringify({ message: 'Sync financeiro concluído', results }), {
+            return new Response(JSON.stringify({ message: 'Sync concluído', results }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            })
+        }
+
+        if (action === 'send_invoice_email') {
+            const { invoiceId } = await req.json()
+            const { data: invoice } = await supabase.from('invoices').select('asaas_id').eq('id', invoiceId).single()
+
+            if (!invoice?.asaas_id) throw new Error('Invoice not linked to Asaas')
+
+            const response = await fetch(`${asaasApiUrl}/payments/${invoice.asaas_id}/notifications`, {
+                method: 'POST',
+                headers: { 'access_token': asaasApiKey }
+            })
+
+            if (!response.ok) throw new Error(await response.text())
+
+            return new Response(JSON.stringify({ success: true }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            })
+        }
+
+        if (action === 'delete_invoice') {
+            const { invoiceId } = await req.json()
+            const { data: invoice } = await supabase.from('invoices').select('asaas_id').eq('id', invoiceId).single()
+
+            if (invoice?.asaas_id) {
+                await fetch(`${asaasApiUrl}/payments/${invoice.asaas_id}`, {
+                    method: 'DELETE',
+                    headers: { 'access_token': asaasApiKey }
+                })
+            }
+
+            await supabase.from('invoices').delete().eq('id', invoiceId)
+
+            return new Response(JSON.stringify({ success: true }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
         }

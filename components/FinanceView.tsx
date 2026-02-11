@@ -48,6 +48,7 @@ interface Invoice {
   billing_date: string;
   due_date?: string;
   status: string;
+  payment_method?: string;
   companies?: { name: string };
 }
 
@@ -358,6 +359,53 @@ const ReceitaSection: React.FC<{ metrics: any, invoices: Invoice[] }> = ({ metri
     });
   }, [invoices, statusFilter]);
 
+  const handleSendInvoiceEmail = async (invoiceId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/asaas-api?action=send_invoice_email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${session?.access_token}`
+        },
+        body: JSON.stringify({ invoiceId })
+      });
+
+      if (!response.ok) throw new Error(await response.text());
+      alert("E-mail de cobrança enviado com sucesso!");
+      await createAuditLog('Envio de Cobrança', `E-mail de cobrança enviado para a fatura ${invoiceId}.`, 'info');
+    } catch (err: any) {
+      console.error("Erro ao enviar e-mail:", err);
+      alert("Erro ao enviar e-mail: " + err.message);
+    }
+  };
+
+  const handleDeleteInvoice = async (invoiceId: string) => {
+    if (!confirm("Tem certeza que deseja remover esta cobrança? Se ela estiver pendente no Asaas, ela será cancelada lá também.")) return;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/asaas-api?action=delete_invoice`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${session?.access_token}`
+        },
+        body: JSON.stringify({ invoiceId })
+      });
+
+      if (!response.ok) throw new Error(await response.text());
+      alert("Cobrança removida com sucesso!");
+      await createAuditLog('Remoção de Cobrança', `Fatura ${invoiceId} removida do sistema.`, 'warning');
+      fetchFinanceData();
+    } catch (err: any) {
+      console.error("Erro ao remover cobrança:", err);
+      alert("Erro ao remover cobrança: " + err.message);
+    }
+  };
+
   return (
     <div className="space-y-4 animate-in slide-in-from-right-4 duration-500">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -421,9 +469,31 @@ const ReceitaSection: React.FC<{ metrics: any, invoices: Invoice[] }> = ({ metri
                     <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">#{inv.id.substring(0, 8)} • {inv.billing_date ? new Date(inv.billing_date).toLocaleDateString('pt-BR') : 'N/A'}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-black text-slate-900 dark:text-white text-base leading-none mb-1">R$ {inv.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                  <StatusBadge status={currentStatus} />
+                <div className="flex items-center space-x-8">
+                  <div className="hidden md:block text-right">
+                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Pagamento</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">{inv.payment_method || '---'}</p>
+                  </div>
+                  <div className="text-right min-w-[100px]">
+                    <p className="font-black text-slate-900 dark:text-white text-base leading-none mb-1">R$ {inv.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    <StatusBadge status={currentStatus} />
+                  </div>
+                  <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+                    <button
+                      onClick={() => handleSendInvoiceEmail(inv.id)}
+                      className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all"
+                      title="Enviar por E-mail"
+                    >
+                      <Plus size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteInvoice(inv.id)}
+                      className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                      title="Excluir Cobrança"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
