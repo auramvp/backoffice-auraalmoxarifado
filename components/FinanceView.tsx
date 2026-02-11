@@ -35,7 +35,13 @@ import {
   Sparkles,
   Archive,
   Package,
-  XCircle
+  XCircle,
+  Eye,
+  Mail,
+  MapPin,
+  Phone,
+  CreditCard,
+  Hash
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -49,7 +55,15 @@ interface Invoice {
   due_date?: string;
   status: string;
   payment_method?: string;
-  companies?: { name: string };
+  plan_name?: string;
+  description?: string;
+  companies?: {
+    name: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    cnpj?: string;
+  };
 }
 
 interface Expense {
@@ -121,7 +135,7 @@ export const FinanceView: React.FC = () => {
       }
 
       const [invRes, expRes, catRes] = await Promise.all([
-        safeFetch(supabase.from('invoices').select('*, companies(name)').order('billing_date', { ascending: false }), []),
+        safeFetch(supabase.from('invoices').select('*, companies(name, email, phone, address, cnpj)').order('billing_date', { ascending: false }), []),
         safeFetch(supabase.from('expenses').select('*').order('date', { ascending: false }), []),
         safeFetch(supabase.from('expense_categories').select('*').order('name'), [])
       ]);
@@ -326,7 +340,7 @@ export const FinanceView: React.FC = () => {
         </div>
       </div>
 
-      {activeTab === 'receita' && <ReceitaSection metrics={metrics} invoices={invoices} />}
+      {activeTab === 'receita' && <ReceitaSection metrics={metrics} invoices={invoices} onRefresh={fetchFinanceData} onLog={createAuditLog} />}
       {activeTab === 'despesas' && <DespesasSection metrics={metrics} expenses={expenses} categories={categories} setCategories={setCategories} onRefresh={fetchFinanceData} onLog={createAuditLog} />}
       {activeTab === 'cac' && <CACSection metrics={metrics} />}
     </div>
@@ -345,8 +359,9 @@ const TabButton: React.FC<{ active: boolean, onClick: () => void, label: string 
   </button>
 );
 
-const ReceitaSection: React.FC<{ metrics: any, invoices: Invoice[] }> = ({ metrics, invoices }) => {
+const ReceitaSection: React.FC<{ metrics: any, invoices: Invoice[], onRefresh: () => void, onLog: (a: string, d: string, t: any) => void }> = ({ metrics, invoices, onRefresh, onLog }) => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'open' | 'overdue' | 'canceled'>('all');
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 
   const filteredInvoices = useMemo(() => {
     return invoices.filter(inv => {
@@ -374,7 +389,7 @@ const ReceitaSection: React.FC<{ metrics: any, invoices: Invoice[] }> = ({ metri
 
       if (!response.ok) throw new Error(await response.text());
       alert("E-mail de cobrança enviado com sucesso!");
-      await createAuditLog('Envio de Cobrança', `E-mail de cobrança enviado para a fatura ${invoiceId}.`, 'info');
+      await onLog('Envio de Cobrança', `E-mail de cobrança enviado para a fatura ${invoiceId}.`, 'info');
     } catch (err: any) {
       console.error("Erro ao enviar e-mail:", err);
       alert("Erro ao enviar e-mail: " + err.message);
@@ -398,8 +413,8 @@ const ReceitaSection: React.FC<{ metrics: any, invoices: Invoice[] }> = ({ metri
 
       if (!response.ok) throw new Error(await response.text());
       alert("Cobrança removida com sucesso!");
-      await createAuditLog('Remoção de Cobrança', `Fatura ${invoiceId} removida do sistema.`, 'warning');
-      fetchFinanceData();
+      await onLog('Remoção de Cobrança', `Fatura ${invoiceId} removida do sistema.`, 'warning');
+      onRefresh();
     } catch (err: any) {
       console.error("Erro ao remover cobrança:", err);
       alert("Erro ao remover cobrança: " + err.message);
@@ -480,11 +495,18 @@ const ReceitaSection: React.FC<{ metrics: any, invoices: Invoice[] }> = ({ metri
                   </div>
                   <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
                     <button
+                      onClick={() => setSelectedInvoice(inv)}
+                      className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all"
+                      title="Ver Detalhes"
+                    >
+                      <Eye size={16} />
+                    </button>
+                    <button
                       onClick={() => handleSendInvoiceEmail(inv.id)}
                       className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-xl transition-all"
                       title="Enviar por E-mail"
                     >
-                      <Plus size={16} />
+                      <Mail size={16} />
                     </button>
                     <button
                       onClick={() => handleDeleteInvoice(inv.id)}
@@ -505,9 +527,102 @@ const ReceitaSection: React.FC<{ metrics: any, invoices: Invoice[] }> = ({ metri
           )}
         </div>
       </div>
+
+      {selectedInvoice && (
+        <InvoiceDetailsModal
+          invoice={selectedInvoice}
+          onClose={() => setSelectedInvoice(null)}
+          onSendEmail={handleSendInvoiceEmail}
+        />
+      )}
     </div>
   );
 };
+
+const InvoiceDetailsModal: React.FC<{ invoice: Invoice, onClose: () => void, onSendEmail: (id: string) => Promise<void> }> = ({ invoice, onClose, onSendEmail }) => {
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#05070A]/95 backdrop-blur-xl animate-in fade-in duration-300">
+      <div className="bg-[#0A0D14] w-full max-w-2xl rounded-3xl p-8 border border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-300 overflow-y-auto max-h-[90vh] custom-scrollbar">
+        <div className="flex justify-between items-start mb-8 border-b border-white/5 pb-6">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-500 border border-blue-500/10 shadow-lg shadow-blue-900/10">
+              <FileText size={28} />
+            </div>
+            <div>
+              <h3 className="text-2xl font-black text-white uppercase italic tracking-tighter leading-none mb-2">Detalhes da Fatura</h3>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] bg-white/5 px-2 py-1 rounded-md inline-block">#{invoice.id}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-all">
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-6">
+            <div className="bg-white/[0.02] p-6 rounded-2xl border border-white/5">
+              <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                <Users size={12} /> Dados do Cliente
+              </h4>
+              <div className="space-y-4">
+                <DetailRow label="Nome Completo" value={invoice.companies?.name} />
+                <DetailRow label="CPF / CNPJ" value={invoice.companies?.cnpj} icon={<Hash size={12} />} />
+                <DetailRow label="E-mail" value={invoice.companies?.email} icon={<Mail size={12} />} />
+                <DetailRow label="Contato" value={invoice.companies?.phone} icon={<Phone size={12} />} />
+                <DetailRow label="Endereço" value={invoice.companies?.address} icon={<MapPin size={12} />} />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="bg-white/[0.02] p-6 rounded-2xl border border-white/5">
+              <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                <DollarSign size={12} /> Informações Financeiras
+              </h4>
+              <div className="space-y-4">
+                <DetailRow label="Plano" value={invoice.description || invoice.plan_name || 'Plano Aura'} />
+                <DetailRow label="Valor" value={`R$ ${invoice.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} highlight />
+                <DetailRow label="Método de Pagamento" value={invoice.payment_method?.toUpperCase()} icon={<CreditCard size={12} />} />
+                <DetailRow label="Data de Geração" value={invoice.billing_date ? new Date(invoice.billing_date).toLocaleString('pt-BR') : 'N/A'} icon={<Calendar size={12} />} />
+                <DetailRow label="Data de Vencimento" value={invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('pt-BR') : 'N/A'} icon={<Clock size={12} />} />
+                <div className="pt-2">
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Status Atual</span>
+                  <StatusBadge status={invoice.status} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8 pt-8 border-t border-white/5 flex justify-end gap-3">
+          <button
+            onClick={() => onSendEmail(invoice.id)}
+            className="px-6 py-3 bg-white/5 border border-white/10 hover:bg-blue-600 hover:border-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-xl flex items-center gap-2"
+          >
+            <Mail size={16} />
+            Reenviar por E-mail
+          </button>
+          <button
+            onClick={onClose}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-xl shadow-blue-600/20"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const DetailRow: React.FC<{ label: string, value?: string, icon?: React.ReactNode, highlight?: boolean }> = ({ label, value, icon, highlight }) => (
+  <div className="space-y-1">
+    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none">{label}</span>
+    <div className={`flex items-center gap-2 ${highlight ? 'text-lg font-black text-white' : 'text-sm font-bold text-slate-300'}`}>
+      {icon && <span className="text-slate-500">{icon}</span>}
+      <span className="truncate">{value || '---'}</span>
+    </div>
+  </div>
+);
 
 const DespesasSection: React.FC<{ metrics: any, expenses: Expense[], categories: Category[], setCategories: any, onRefresh: () => void, onLog: (a: string, d: string, t: any) => void }> = ({ metrics, expenses, categories, setCategories, onRefresh, onLog }) => {
   const [showModal, setShowModal] = useState(false);
