@@ -99,6 +99,7 @@ serve(async (req) => {
             const results = []
 
             for (const company of companies) {
+                console.log(`Buscando pagamentos para: ${company.name} (${company.asaas_customer_id})`)
                 const response = await fetch(`${asaasApiUrl}/payments?customer=${company.asaas_customer_id}&limit=50`, {
                     headers: { 'access_token': asaasApiKey }
                 })
@@ -111,8 +112,9 @@ serve(async (req) => {
                     for (const payment of payments) {
                         let status = 'open'
                         if (['CONFIRMED', 'RECEIVED'].includes(payment.status)) status = 'paid'
+                        if (['OVERDUE'].includes(payment.status)) status = 'overdue'
 
-                        // Simple de-duplication
+                        // Simple de-duplication: check by company_id, amount and due_date
                         const { data: existing } = await supabase
                             .from('invoices')
                             .select('id')
@@ -122,24 +124,30 @@ serve(async (req) => {
                             .limit(1)
 
                         if (!existing || existing.length === 0) {
-                            await supabase.from('invoices').insert({
+                            const { error: insertError } = await supabase.from('invoices').insert({
                                 company_id: company.id,
                                 amount: payment.value,
                                 status: status,
                                 billing_date: payment.paymentDate || payment.clientPaymentDate || new Date().toISOString(),
                                 due_date: payment.dueDate,
                                 payment_method: payment.billingType === 'PIX' ? 'pix' : payment.billingType === 'BOLETO' ? 'boleto' : 'credit_card',
-                                description: payment.description || 'Assinatura Aura',
+                                description: payment.description || 'Assinatura Aura (Sincronizada)',
                                 plan_name: 'Plano Aura'
                             })
-                            count++
+
+                            if (insertError) {
+                                console.error(`Erro ao inserir fatura para ${company.name}:`, insertError)
+                            } else {
+                                count++
+                            }
                         } else {
                             await supabase.from('invoices').update({ status: status }).eq('id', existing[0].id)
                         }
                     }
                     results.push({ company: company.name, synced: count })
                 } else {
-                    results.push({ company: company.name, error: 'Failed to fetch payments' })
+                    const errorMsg = await response.text()
+                    results.push({ company: company.name, error: 'Failed to fetch payments', details: errorMsg })
                 }
             }
 

@@ -17,18 +17,56 @@ serve(async (req) => {
 
         const event = payload.event
         const payment = payload.payment
+
+        if (!payment) {
+            console.log(`Evento ${event} recebido sem objeto 'payment'. Ignorando processamento detalhado.`)
+            return new Response(JSON.stringify({ received: true, status: 'ignored_no_payment' }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' }
+            })
+        }
+
         const customerId = payment.customer
 
         // Buscar empresa pelo asaas_customer_id
-        const { data: company, error: companyError } = await supabase
+        let { data: company, error: companyError } = await supabase
             .from('companies')
             .select('id, cnpj, name')
             .eq('asaas_customer_id', customerId)
             .single()
 
         if (!company) {
-            console.warn(`Empresa não encontrada para customer_id: ${customerId}`)
-            // Tentar buscar pelo CPF/CNPJ se disponível no payload (opcional)
+            console.log(`Empresa não encontrada pelo asaas_customer_id: ${customerId}. Tentando pelo CNPJ...`)
+
+            // Tentar buscar pelo CPF/CNPJ se disponível no payload
+            // O Asaas costuma enviar no objeto payment.customer do payload de webhook APENAS o ID.
+            // Para pegar o CNPJ, às vezes precisamos de uma chamada extra ou se vier no description/externalReference.
+            // No entanto, vamos ser inteligentes: se não achamos pelo ID, e temos o CNPJ em algum lugar, usamos.
+
+            const cnpjToSearch = payment.externalReference || payment.cpfCnpj; // fallback se o payload tiver
+
+            if (cnpjToSearch) {
+                const cleanedCnpj = cnpjToSearch.replace(/\D/g, '')
+                const { data: companyByCnpj } = await supabase
+                    .from('companies')
+                    .select('id, cnpj, name')
+                    .eq('cnpj', cleanedCnpj)
+                    .single()
+
+                if (companyByCnpj) {
+                    company = companyByCnpj
+                    console.log(`Empresa encontrada pelo CNPJ (${cleanedCnpj}): ${company.name}. Vinculando asaas_customer_id.`)
+                    // Vincular o ID para futuras requisições
+                    await supabase
+                        .from('companies')
+                        .update({ asaas_customer_id: customerId })
+                        .eq('id', company.id)
+                }
+            }
+        }
+
+        if (!company) {
+            console.warn(`Empresa não encontrada para customer_id: ${customerId} e sem CNPJ disponível para fallback.`)
             return new Response(JSON.stringify({ received: true, status: 'company_not_found' }), {
                 status: 200,
                 headers: { 'Content-Type': 'application/json' }
@@ -41,21 +79,19 @@ serve(async (req) => {
         switch (event) {
             case 'PAYMENT_CONFIRMED':
             case 'PAYMENT_RECEIVED':
-                newStatus = 'active' // Empresa ativa
+                newStatus = 'active'
                 subscriptionStatus = 'active'
                 break
             case 'PAYMENT_OVERDUE':
-                newStatus = 'suspended' // Pode decidir suspender ou apenas marcar overdue
+                newStatus = 'suspended'
                 subscriptionStatus = 'overdue'
                 break
             case 'PAYMENT_REFUNDED':
                 subscriptionStatus = 'refunded'
                 break
-            // Adicionar outros eventos conforme necessário
         }
 
         if (newStatus) {
-            // Atualizar status da empresa
             await supabase
                 .from('companies')
                 .update({ status: newStatus === 'active' ? 'Ativo' : 'Suspenso' })
@@ -63,7 +99,6 @@ serve(async (req) => {
         }
 
         if (subscriptionStatus) {
-            // Atualizar/Criar assinatura
             await supabase
                 .from('subscriptions')
                 .upsert({
@@ -78,13 +113,10 @@ serve(async (req) => {
                 }, { onConflict: 'cnpj' })
         }
 
-        // --- NOVO: Criar Registro Financeiro (Invoice) ---
         if (['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED', 'PAYMENT_CREATED', 'PAYMENT_UPDATED', 'PAYMENT_OVERDUE'].includes(event)) {
-
             let status = 'open'
             if (['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'].includes(event)) status = 'paid'
 
-            // Check if already exists to update status
             const { data: existing } = await supabase
                 .from('invoices')
                 .select('id')
@@ -127,4 +159,5 @@ serve(async (req) => {
         console.error('Erro no processamento do webhook:', error)
         return new Response(JSON.stringify({ error: error.message }), { status: 500 })
     }
+})
 })
