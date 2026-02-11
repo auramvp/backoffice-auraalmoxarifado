@@ -68,12 +68,31 @@ serve(async (req) => {
                     if (searchRes.ok) {
                         const searchData = await searchRes.json()
                         if (searchData.data && searchData.data.length > 0) {
-                            const existingCustomer = searchData.data[0]
+                            let selectedCustomer = searchData.data[0]
+                            let maxPayments = -1
+
+                            // If multiple found, try to find the one with payments
+                            if (searchData.data.length > 1) {
+                                console.log(`Múltiplos clientes encontrados para ${customerData.cpfCnpj}. Verificando histórico...`)
+                                for (const candidate of searchData.data) {
+                                    const payRes = await fetch(`${asaasApiUrl}/payments?customer=${candidate.id}&limit=1`, {
+                                        headers: { 'access_token': asaasApiKey }
+                                    })
+                                    if (payRes.ok) {
+                                        const payData = await payRes.json()
+                                        if (payData.totalCount > maxPayments) {
+                                            maxPayments = payData.totalCount
+                                            selectedCustomer = candidate
+                                        }
+                                    }
+                                }
+                            }
+
                             await supabase
                                 .from('companies')
-                                .update({ asaas_customer_id: existingCustomer.id })
+                                .update({ asaas_customer_id: selectedCustomer.id })
                                 .eq('id', company.id)
-                            results.push({ company: company.name, status: 'linked_existing', asaas_id: existingCustomer.id })
+                            results.push({ company: company.name, status: 'linked_existing', asaas_id: selectedCustomer.id, payments_found: maxPayments >= 0 ? maxPayments : 'unknown' })
                         } else {
                             results.push({ company: company.name, status: 'error', details: errorText })
                         }
@@ -107,14 +126,17 @@ serve(async (req) => {
                 if (response.ok) {
                     const data = await response.json()
                     const payments = data.data || []
+                    console.log(`Encontrados ${payments.length} pagamentos para ${company.name}`)
+                    if (payments.length > 0) {
+                        console.log('Exemplos de pagamentos:', JSON.stringify(payments.slice(0, 5), null, 2))
+                    }
                     let count = 0
 
                     for (const payment of payments) {
                         let status = 'open'
-                        if (['CONFIRMED', 'RECEIVED'].includes(payment.status)) status = 'paid'
+                        if (['CONFIRMED', 'RECEIVED', 'RECEIVED_IN_CASH'].includes(payment.status)) status = 'paid'
                         if (['OVERDUE'].includes(payment.status)) status = 'overdue'
 
-                        // Simple de-duplication: check by company_id, amount and due_date
                         const { data: existing } = await supabase
                             .from('invoices')
                             .select('id')
