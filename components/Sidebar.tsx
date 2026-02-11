@@ -56,11 +56,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       try {
         const { data: { user } } = await supabase.auth.getUser();
 
-        if (user && user.email) {
+        if (user) {
           const { data: profile } = await supabase
             .from('profiles')
             .select('name, role, custom_role, permissions')
-            .eq('email', user.email)
+            .eq('id', user.id)
             .single();
 
           if (profile) {

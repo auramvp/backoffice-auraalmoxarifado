@@ -75,7 +75,18 @@ export const TeamView: React.FC = () => {
       .order('name');
 
     if (!error && data) {
-      setTeam(data as any);
+      // Filtra apenas membros reais do Backoffice (Admin ou Time com permissões ativas)
+      const backofficeMembers = data.filter((user: any) => {
+        if (user.role === 'ADMIN') return true;
+
+        // Se for ALMOXARIFE, precisa ter ao menos uma permissão que não seja 'none'
+        const perms = user.permissions || {};
+        const activePermsCount = Object.values(perms).filter(v => v === 'view' || v === 'full' || v === true).length;
+
+        return activePermsCount > 0;
+      });
+
+      setTeam(backofficeMembers as any);
     }
     setLoading(false);
   };
@@ -339,7 +350,9 @@ export const TeamView: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-3 text-center">
-                      <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest bg-slate-100 dark:bg-white/5 px-2 py-1 rounded border border-slate-200 dark:border-white/5">{member.role}</span>
+                      <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest bg-slate-100 dark:bg-white/5 px-2 py-1 rounded border border-slate-200 dark:border-white/5">
+                        {member.custom_role || member.role}
+                      </span>
                     </td>
                     <td className="px-6 py-3 text-center">
                       <div className="flex items-center justify-center space-x-2 text-emerald-500">
