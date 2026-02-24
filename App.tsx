@@ -16,7 +16,7 @@ import { MarketingView } from './components/MarketingView';
 import { Login } from './components/Login';
 import { View } from './types';
 import { supabase } from './lib/supabase';
-import { Ban, Lock, PhoneCall, LogOut, ShieldAlert, Loader2, RefreshCcw, CreditCard } from 'lucide-react';
+import { Ban, Lock, PhoneCall, LogOut, ShieldAlert, ShieldX, Loader2, RefreshCcw, CreditCard } from 'lucide-react';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
@@ -30,6 +30,10 @@ const App: React.FC = () => {
   const [authLoading, setAuthLoading] = useState(true);
   const [currentCompanyName, setCurrentCompanyName] = useState('');
   const pollIntervalRef = useRef<number | null>(null);
+
+  // Estado de verificação de admin
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [checkingAdmin, setCheckingAdmin] = useState(true);
 
   // ID atualizado conforme o UUID visto no screenshot (empresa CARLOS GABRIEL)
   // const TARGET_COMPANY_ID = 'dce86f24-1154-43e8-8b27-1a9c6fe2ce8a'; 
@@ -51,6 +55,43 @@ const App: React.FC = () => {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Verificação de role ADMIN
+  useEffect(() => {
+    const checkAdminRole = async () => {
+      if (!session?.user?.id) {
+        setIsAdmin(null);
+        setCheckingAdmin(false);
+        return;
+      }
+
+      setCheckingAdmin(true);
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Erro ao verificar role do usuário:', error);
+          setIsAdmin(false);
+        } else if (data) {
+          setIsAdmin(data.role === 'ADMIN');
+        } else {
+          // Usuário não tem profile
+          setIsAdmin(false);
+        }
+      } catch (err) {
+        console.error('Erro inesperado ao verificar admin:', err);
+        setIsAdmin(false);
+      } finally {
+        setCheckingAdmin(false);
+      }
+    };
+
+    checkAdminRole();
+  }, [session]);
 
   useEffect(() => {
     if (theme === 'dark') {
@@ -158,6 +199,75 @@ const App: React.FC = () => {
 
   if (!session) {
     return <Login onLoginSuccess={() => { }} />;
+  }
+
+  // Verificando se o usuário é admin
+  if (checkingAdmin) {
+    return (
+      <div className="h-screen w-full bg-[#05070A] flex flex-col items-center justify-center space-y-6">
+        <img src="https://zdgapmcalocdvdgvbwsj.supabase.co/storage/v1/object/public/AuraLogo/branco.png" className="h-10 opacity-50 animate-pulse" alt="Aura Logo" />
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-12 h-12 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin" />
+          <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Verificando Permissões...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // TELA DE ACESSO NEGADO (não é admin)
+  if (isAdmin === false) {
+    return (
+      <div className="h-screen w-full bg-[#05070A] flex items-center justify-center p-6 overflow-hidden relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-orange-600/10 via-transparent to-transparent pointer-events-none" />
+        <div className="absolute top-0 left-0 w-full h-1 bg-orange-500" />
+
+        <div className="max-w-xl w-full bg-[#0A0D14] rounded-[3rem] p-12 border border-orange-500/20 shadow-[0_50px_100px_rgba(234,88,12,0.2)] text-center relative z-10 animate-in zoom-in-95 duration-500">
+          <img
+            src="https://zdgapmcalocdvdgvbwsj.supabase.co/storage/v1/object/public/AuraLogo/branco.png"
+            alt="Aura"
+            className="h-12 mx-auto mb-10 opacity-80"
+          />
+
+          <div className="w-24 h-24 bg-orange-600 rounded-[2rem] flex items-center justify-center text-white mx-auto mb-8 shadow-2xl shadow-orange-900/40">
+            <ShieldX size={48} strokeWidth={2.5} />
+          </div>
+
+          <h1 className="text-4xl font-black text-white uppercase tracking-tighter mb-4 italic leading-tight">
+            ACESSO RESTRITO
+          </h1>
+
+          <div className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-4 mb-8 inline-block">
+            <p className="text-orange-500 font-black uppercase text-[10px] tracking-[0.2em] flex items-center gap-2">
+              <ShieldX size={14} />
+              APENAS ADMINISTRADORES
+            </p>
+          </div>
+
+          <p className="text-slate-400 text-lg font-medium mb-10 leading-relaxed max-w-lg mx-auto">
+            Sua conta <span className="text-white font-black">{session.user.email}</span> não possui permissão de <span className="text-orange-500 font-black">Administrador</span> para acessar o Backoffice.
+            <br /><br />
+            Solicite acesso ao administrador do sistema.
+          </p>
+
+          <button
+            onClick={async () => {
+              await supabase.auth.signOut();
+            }}
+            className="flex items-center justify-center space-x-3 bg-white text-slate-900 py-5 px-8 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all active:scale-95 shadow-xl shadow-white/10 mx-auto"
+          >
+            <LogOut size={18} />
+            <span>Sair e Trocar de Conta</span>
+          </button>
+
+          <div className="mt-12 pt-8 border-t border-white/5 flex flex-col items-center">
+            <div className="flex items-center space-x-2 text-[9px] font-black text-slate-600 uppercase tracking-widest">
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-600" />
+              <span>Protocolo de Segurança AURA v4.6</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (checkingAccess) {
