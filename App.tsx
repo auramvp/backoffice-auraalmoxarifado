@@ -217,34 +217,34 @@ const App: React.FC = () => {
   // TELA DE ACESSO NEGADO (não é admin)
   if (isAdmin === false) {
     return (
-      <div className="h-screen w-full bg-[#05070A] flex items-center justify-center p-6 overflow-hidden relative">
-        <div className="absolute inset-0 bg-gradient-to-b from-orange-600/10 via-transparent to-transparent pointer-events-none" />
-        <div className="absolute top-0 left-0 w-full h-1 bg-orange-500" />
+      <div className="h-screen w-full bg-[#05070A] flex items-center justify-center p-4 overflow-hidden relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-red-600/10 via-transparent to-transparent pointer-events-none" />
+        <div className="absolute top-0 left-0 w-full h-1 bg-red-500" />
 
-        <div className="max-w-xl w-full bg-[#0A0D14] rounded-[3rem] p-12 border border-orange-500/20 shadow-[0_50px_100px_rgba(234,88,12,0.2)] text-center relative z-10 animate-in zoom-in-95 duration-500">
+        <div className="max-w-sm w-full bg-[#0A0D14] rounded-2xl p-8 border border-red-500/20 shadow-[0_30px_60px_rgba(220,38,38,0.15)] text-center relative z-10">
           <img
             src="https://zdgapmcalocdvdgvbwsj.supabase.co/storage/v1/object/public/AuraLogo/branco.png"
             alt="Aura"
-            className="h-12 mx-auto mb-10 opacity-80"
+            className="h-8 mx-auto mb-6 opacity-80"
           />
 
-          <div className="w-24 h-24 bg-orange-600 rounded-[2rem] flex items-center justify-center text-white mx-auto mb-8 shadow-2xl shadow-orange-900/40">
-            <ShieldX size={48} strokeWidth={2.5} />
+          <div className="w-14 h-14 bg-red-600 rounded-xl flex items-center justify-center text-white mx-auto mb-5 shadow-lg shadow-red-900/30">
+            <ShieldX size={28} strokeWidth={2.5} />
           </div>
 
-          <h1 className="text-4xl font-black text-white uppercase tracking-tighter mb-4 italic leading-tight">
+          <h1 className="text-2xl font-black text-white uppercase tracking-tight mb-3">
             ACESSO RESTRITO
           </h1>
 
-          <div className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-4 mb-8 inline-block">
-            <p className="text-orange-500 font-black uppercase text-[10px] tracking-[0.2em] flex items-center gap-2">
-              <ShieldX size={14} />
+          <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2 mb-5 inline-block">
+            <p className="text-red-500 font-black uppercase text-[9px] tracking-[0.15em] flex items-center gap-1.5">
+              <ShieldX size={12} />
               APENAS ADMINISTRADORES
             </p>
           </div>
 
-          <p className="text-slate-400 text-lg font-medium mb-10 leading-relaxed max-w-lg mx-auto">
-            Sua conta <span className="text-white font-black">{session.user.email}</span> não possui permissão de <span className="text-orange-500 font-black">Administrador</span> para acessar o Backoffice.
+          <p className="text-slate-400 text-sm font-medium mb-6 leading-relaxed">
+            A conta <span className="text-white font-bold">{session.user.email}</span> não possui permissão de <span className="text-red-500 font-bold">Administrador</span>.
             <br /><br />
             Solicite acesso ao administrador do sistema.
           </p>
@@ -253,15 +253,15 @@ const App: React.FC = () => {
             onClick={async () => {
               await supabase.auth.signOut();
             }}
-            className="flex items-center justify-center space-x-3 bg-white text-slate-900 py-5 px-8 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all active:scale-95 shadow-xl shadow-white/10 mx-auto"
+            className="flex items-center justify-center space-x-2 bg-white text-slate-900 py-3 px-6 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-slate-100 transition-all active:scale-95 shadow-lg mx-auto"
           >
-            <LogOut size={18} />
+            <LogOut size={16} />
             <span>Sair e Trocar de Conta</span>
           </button>
 
-          <div className="mt-12 pt-8 border-t border-white/5 flex flex-col items-center">
-            <div className="flex items-center space-x-2 text-[9px] font-black text-slate-600 uppercase tracking-widest">
-              <span className="w-1.5 h-1.5 rounded-full bg-orange-600" />
+          <div className="mt-6 pt-4 border-t border-white/5">
+            <div className="flex items-center justify-center space-x-2 text-[8px] font-black text-slate-600 uppercase tracking-widest">
+              <span className="w-1 h-1 rounded-full bg-red-600" />
               <span>Protocolo de Segurança AURA v4.6</span>
             </div>
           </div>
